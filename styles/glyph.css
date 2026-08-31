@@ -1,0 +1,465 @@
+.glyph {
+  --glyph-gap: 0.5rem;
+
+  &.trigger-config .tab.scrollable {
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+
+  .glyph-program-tab .glyph-handler-picker {
+    margin-bottom: var(--glyph-gap);
+  }
+
+  .glyph-tree {
+    gap: 0.25rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .glyph-node-row {
+    padding: 0.25rem 0.5rem;
+    border: 0.0625rem solid var(--color-border-light-tertiary, rgb(200 200 200));
+    border-radius: 0.25rem;
+
+    &.glyph-node-structural {
+      background: rgb(0 0 0 / 4%);
+    }
+
+    &.glyph-node-error {
+      border-color: var(--color-level-error, rgb(170 0 0));
+      color: var(--color-level-error, rgb(170 0 0));
+    }
+
+    &.glyph-node-disabled {
+      opacity: 0.5;
+    }
+
+    .glyph-node-header {
+      gap: 0.375rem;
+      display: flex;
+      align-items: center;
+
+      .glyph-node-toggle,
+      .glyph-node-toggle-spacer {
+        flex: 0 0 auto;
+        width: 1.25rem;
+      }
+
+      .glyph-node-label {
+        flex: 1 1 auto;
+        font-weight: 600;
+      }
+
+      .glyph-node-controls {
+        gap: 0.125rem;
+        display: flex;
+      }
+    }
+
+    .glyph-node-body {
+      gap: 0.5rem;
+      margin-inline-start: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      margin-top: 0.375rem;
+
+      .glyph-node-field label {
+        font-weight: 600;
+      }
+    }
+  }
+
+  .glyph-slot {
+    border-inline-start: 0.125rem solid var(--color-border-light-tertiary, rgb(200 200 200));
+    padding-inline-start: 0.5rem;
+
+    .glyph-slot-header {
+      display: flex;
+      opacity: 0.75;
+      justify-content: space-between;
+      align-items: center;
+      font-size: var(--font-size-12, 0.75rem);
+      text-transform: uppercase;
+    }
+
+    .glyph-slot-rows {
+      gap: 0.25rem;
+      display: flex;
+      flex-direction: column;
+      margin: 0.25rem 0;
+    }
+  }
+
+  .glyph-add-node-bar {
+    gap: 0.25rem;
+    display: flex;
+    align-items: center;
+
+    .glyph-add-filter {
+      flex: 1 1 auto;
+    }
+
+    .glyph-add-type {
+      flex: 2 1 auto;
+    }
+  }
+
+  .glyph-combobox {
+    display: inline-block;
+    position: relative;
+    width: 100%;
+
+    &.is-disabled {
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    &.is-empty .glyph-combobox-trigger-label {
+      opacity: 0.75;
+    }
+
+    &.is-open .glyph-combobox-trigger {
+      outline: 0.125rem solid var(--color-cool-3, rgb(50 100 200));
+      outline-offset: -0.0625rem;
+    }
+
+    .glyph-combobox-trigger {
+      gap: 0.5rem;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-height: 1.75rem;
+      padding: 0.25rem 0.5rem;
+      border: 0.0625rem solid var(--color-border-light-tertiary, rgb(200 200 200));
+      border-radius: 0.25rem;
+      text-align: left;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 0.125rem solid var(--color-cool-3, rgb(50 100 200));
+        outline-offset: -0.0625rem;
+      }
+
+      .glyph-combobox-trigger-icon {
+        display: inline-flex;
+        flex: 0 0 auto;
+        width: 1.25rem;
+        height: 1.25rem;
+
+        img {
+          object-fit: contain;
+          width: 100%;
+          height: 100%;
+        }
+      }
+
+      .glyph-combobox-trigger-label {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+    }
+
+    .glyph-combobox-caret {
+      opacity: 0.7;
+      font-size: 0.75em;
+    }
+
+    .glyph-combobox-panel {
+      display: flex;
+      z-index: 100;
+      position: fixed;
+      flex-direction: column;
+      max-height: 20rem;
+      margin: 0;
+      padding: 0;
+      border: 0.0625rem solid rgb(0 0 0 / 20%);
+      border-radius: 0.25rem;
+      overflow: hidden;
+      color: rgb(20 20 20);
+      background: rgb(255 255 255);
+      box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 25%);
+
+      &[hidden] {
+        display: none;
+      }
+
+      .glyph-combobox-search {
+        gap: 0.4rem;
+        display: flex;
+        align-items: center;
+        padding: 0.35rem 0.5rem;
+        border-bottom: 0.0625rem solid rgb(0 0 0 / 20%);
+
+        > i {
+          opacity: 0.75;
+        }
+
+        .glyph-combobox-search-input {
+          flex: 1;
+          border: none;
+          outline: none;
+          background: transparent;
+        }
+      }
+
+      .glyph-combobox-listbox {
+        margin: 0;
+        padding: 0.25rem 0;
+        outline: none;
+        overflow-y: auto;
+        list-style: none;
+
+        .glyph-combobox-group,
+        .glyph-combobox-group-list {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .glyph-combobox-group-label {
+          opacity: 0.75;
+          padding: 0.25rem 0.75rem;
+          font-weight: 600;
+          font-size: var(--font-size-12, 0.75rem);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .glyph-combobox-option {
+          gap: 0.5rem;
+          display: flex;
+          align-items: center;
+          min-height: 1.75rem;
+          padding: 0.3rem 0.75rem;
+          cursor: pointer;
+
+          &.is-active {
+            background: rgb(0 0 0 / 8%);
+          }
+
+          &[aria-selected='true'] {
+            background: rgb(50 100 200 / 20%);
+          }
+
+          &.is-disabled {
+            opacity: 0.4;
+          }
+
+          .glyph-combobox-option-icon {
+            display: inline-flex;
+            flex: 0 0 auto;
+            width: 1.25rem;
+            height: 1.25rem;
+
+            img {
+              object-fit: contain;
+              width: 100%;
+              height: 100%;
+            }
+          }
+
+          .glyph-combobox-option-label {
+            flex: 0 0 auto;
+            white-space: nowrap;
+          }
+
+          .glyph-combobox-option-badge {
+            opacity: 0.75;
+            padding: 0.1rem 0.4rem;
+            border: 0.0625rem solid rgb(0 0 0 / 20%);
+            border-radius: 0.125rem;
+            font-size: 0.75em;
+          }
+        }
+
+        .glyph-combobox-empty {
+          opacity: 0.75;
+          padding: 0.5rem 0.75rem;
+          font-style: italic;
+        }
+      }
+    }
+
+    .glyph-combobox-trigger-tags,
+    .glyph-combobox-option-tags {
+      gap: 0.25rem;
+      display: inline-flex;
+      flex: 1 1 auto;
+      flex-wrap: nowrap;
+      align-items: center;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .glyph-combobox-option-tag {
+      opacity: 0.75;
+      padding: 0.05rem 0.4rem;
+      border: 0.0625rem solid rgb(0 0 0 / 20%);
+      border-radius: 999rem;
+      font-size: 0.7em;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+  }
+
+  .glyph-history-list {
+    gap: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    .glyph-history-row {
+      gap: 0.5rem;
+      display: flex;
+      align-items: center;
+      padding: 0.25rem 0.5rem;
+      border: 0.0625rem solid var(--color-border-light-tertiary, rgb(200 200 200));
+      border-radius: 0.25rem;
+
+      .glyph-history-time {
+        opacity: 0.75;
+        font-size: var(--font-size-12, 0.75rem);
+      }
+
+      .glyph-history-name {
+        font-weight: 600;
+      }
+
+      .glyph-history-error {
+        flex: 1 1 auto;
+        color: var(--color-level-error, rgb(170 0 0));
+      }
+    }
+  }
+
+  .glyph-dry-run-error {
+    color: var(--color-level-error, rgb(170 0 0));
+  }
+
+  .glyph-recipe-groups {
+    gap: 1rem;
+    display: flex;
+    flex-direction: column;
+
+    .glyph-recipe-group h3 {
+      margin: 0 0 0.375rem;
+    }
+
+    .glyph-recipe-rows {
+      gap: 0.25rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .glyph-recipe-row {
+      gap: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.375rem 0.5rem;
+      border: 0.0625rem solid var(--color-border-light-tertiary, rgb(200 200 200));
+      border-radius: 0.25rem;
+
+      .glyph-recipe-info {
+        flex: 1 1 auto;
+
+        .glyph-recipe-name {
+          font-weight: 600;
+        }
+      }
+    }
+  }
+
+  .glyph-point,
+  .glyph-reference {
+    gap: 0.5rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .glyph-point label {
+    gap: 0.25rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .glyph-import-totals {
+    gap: 0.75rem;
+    display: flex;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    list-style: none;
+    font-weight: 600;
+  }
+
+  .glyph-import-ok {
+    color: var(--color-level-success, rgb(0 128 0));
+  }
+
+  .glyph-import-partial,
+  .glyph-import-skipped {
+    color: var(--color-level-warning, rgb(170 130 0));
+  }
+
+  .glyph-import-manual {
+    color: var(--color-level-error, rgb(170 0 0));
+  }
+
+  .glyph-import-tiles {
+    gap: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    max-height: 24rem;
+  }
+
+  .glyph-import-tile {
+    padding: 0.5rem 0.75rem;
+    border: 0.0625rem solid var(--color-border-light-tertiary, rgb(200 200 200));
+    border-radius: 0.25rem;
+
+    h3 {
+      margin: 0 0 0.375rem;
+    }
+  }
+
+  .glyph-import-issues {
+    gap: 0.375rem;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .glyph-import-issue {
+    padding: 0.25rem 0.5rem;
+    border-left: 0.1875rem solid var(--color-border-light-tertiary, rgb(200 200 200));
+
+    .glyph-import-issue-level {
+      margin-right: 0.375rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75em;
+    }
+
+    .glyph-import-issue-matt {
+      overflow-x: auto;
+      margin: 0.25rem 0 0;
+      opacity: 0.75;
+      font-size: 0.75em;
+      white-space: pre-wrap;
+    }
+
+    &.glyph-import-manual {
+      border-left-color: var(--color-level-error, rgb(170 0 0));
+    }
+
+    &.glyph-import-partial,
+    &.glyph-import-skipped {
+      border-left-color: var(--color-level-warning, rgb(170 130 0));
+    }
+  }
+}

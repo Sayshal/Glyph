@@ -1,0 +1,19 @@
+<div class="tab scrollable{{#if tab.active}} active{{/if}}" data-group="{{tab.group}}" data-tab="{{tab.id}}">
+  {{#if hint}}
+    <p class="hint">{{localize hint}}</p>
+  {{/if}}
+  {{{templateHtml}}}
+  {{#each fields as |outer|}}
+    {{#if outer.fieldset}}
+      <fieldset>
+        <legend>{{localize outer.legend}}</legend>
+        {{#each outer.fields as |f|}}
+          {{formField f.field value=f.value label=f.label hint=f.hint localize=true}}
+        {{/each}}
+      </fieldset>
+    {{else}}
+      {{formField outer.field value=outer.value label=outer.label hint=outer.hint localize=true}}
+    {{/if}}
+  {{/each}}
+  {{{linkedTileHtml}}}
+</div>

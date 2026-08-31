@@ -1,0 +1,39 @@
+<p class="hint">{{localize "GLYPH.IMPORT.hint" tileCount=tileCount}}</p>
+
+<ul class="glyph-import-totals">
+  <li class="glyph-import-ok">{{localize "GLYPH.IMPORT.COUNTS.ok" count=totals.ok}}</li>
+  <li class="glyph-import-partial">{{localize "GLYPH.IMPORT.COUNTS.partial" count=totals.partial}}</li>
+  <li class="glyph-import-manual">{{localize "GLYPH.IMPORT.COUNTS.manual" count=totals.manual}}</li>
+  <li class="glyph-import-skipped">{{localize "GLYPH.IMPORT.COUNTS.skipped" count=totals.skipped}}</li>
+</ul>
+
+<div class="glyph-import-tiles">
+  {{#each rows as |row|}}
+    <section class="glyph-import-tile">
+      <h3>
+        {{row.name}}
+        {{#unless row.linked}}<span class="hint">{{localize "GLYPH.IMPORT.markerOnly"}}</span>{{/unless}}
+      </h3>
+      {{#if row.issues.length}}
+        <ul class="glyph-import-issues">
+          {{#each row.issues as |issue|}}
+            <li class="glyph-import-issue glyph-import-{{issue.level}}">
+              <span class="glyph-import-issue-level">{{localize (concat "GLYPH.IMPORT.LEVELS." issue.level)}}</span>
+              <span class="glyph-import-issue-note">{{issue.note}}</span>
+              <pre class="glyph-import-issue-matt">{{issue.matt}}</pre>
+            </li>
+          {{/each}}
+        </ul>
+      {{else}}
+        <p class="hint">{{localize "GLYPH.IMPORT.allOk"}}</p>
+      {{/if}}
+    </section>
+  {{/each}}
+</div>
+
+<footer class="form-footer">
+  <button type="button" data-action="commit">
+    <i class="fa-solid fa-check"></i>
+    {{localize "GLYPH.IMPORT.commit"}}
+  </button>
+</footer>

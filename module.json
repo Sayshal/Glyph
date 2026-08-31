@@ -1,0 +1,47 @@
+{
+  "authors": [
+    {
+      "discord": "Tyler",
+      "flags": {},
+      "name": "Tyler",
+      "url": "https://github.com/Sayshal"
+    }
+  ],
+  "bugs": "https://github.com/Sayshal/glyph/issues",
+  "changelog": "https://github.com/Sayshal/glyph/releases",
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14.367"
+  },
+  "description": "Region trigger automation for Foundry: run actions when tokens enter, exit, move, click, or take a turn. A modern replacement for Active Tile Triggers.",
+  "documentTypes": {
+    "RegionBehavior": {
+      "trigger": {}
+    }
+  },
+  "download": "",
+  "esmodules": ["glyph.mjs"],
+  "styles": ["styles/glyph.css"],
+  "flags": {
+    "hotReload": {
+      "extensions": ["css", "html", "hbs", "json"],
+      "paths": ["styles", "templates"]
+    }
+  },
+  "id": "glyph",
+  "license": "https://github.com/Sayshal/glyph?tab=MIT-1-ov-file",
+  "manifest": "https://github.com/Sayshal/glyph/releases/latest/download/module.json",
+  "readme": "https://github.com/Sayshal/glyph?tab=readme-ov-file",
+  "relationships": {
+    "requires": [
+      {
+        "id": "3ds-atlas",
+        "type": "module"
+      }
+    ]
+  },
+  "socket": true,
+  "title": "Glyph: Active Region Triggers",
+  "url": "https://github.com/Sayshal/glyph",
+  "version": ""
+}

@@ -1,0 +1,22 @@
+<div class="tab scrollable glyph-program-tab{{#if tab.active}} active{{/if}}" data-group="{{tab.group}}"
+  data-tab="{{tab.id}}">
+  {{#if selectedHandler}}
+    <div class="form-group glyph-handler-picker">
+      <label>{{localize "GLYPH.TREE.editingHandler"}}</label>
+      <div class="form-fields">
+        <select class="glyph-handler-select">
+          {{#each handlerNames as |name|}}
+            <option value="{{name}}" {{#if (eq name ../selectedHandler)}}selected{{/if}}>{{name}}</option>
+          {{/each}}
+        </select>
+        <button type="button" class="glyph-dry-run" data-line-action="dry-run">
+          <i class="fa-solid fa-vial"></i> {{localize "GLYPH.TREE.dryRun"}}
+        </button>
+      </div>
+      <p class="hint">{{localize "GLYPH.TREE.editingHandlerHint"}}</p>
+    </div>
+    <div class="glyph-tree">{{{programHtml}}}</div>
+  {{else}}
+    <p class="hint">{{localize "GLYPH.PLACEHOLDER.program"}}</p>
+  {{/if}}
+</div>

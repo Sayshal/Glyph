@@ -1,0 +1,20 @@
+<div class="tab scrollable glyph-history-tab{{#if tab.active}} active{{/if}}" data-group="{{tab.group}}"
+  data-tab="{{tab.id}}">
+  {{#if historyEntries.length}}
+    <ul class="glyph-history-list">
+      {{#each historyEntries as |entry|}}
+        <li class="glyph-history-row">
+          <span class="glyph-history-name">{{entry.name}}</span>
+          <span class="glyph-history-time">{{entry.timeLabel}}</span>
+          {{#if entry.error}}<span class="glyph-history-error">{{entry.error}}</span>{{/if}}
+          <button type="button" data-line-action="delete-history" data-index="{{entry.index}}"
+            aria-label="{{localize 'GLYPH.TREE.delete'}}" data-tooltip>
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </li>
+      {{/each}}
+    </ul>
+  {{else}}
+    <p class="hint">{{localize "GLYPH.PLACEHOLDER.history"}}</p>
+  {{/if}}
+</div>

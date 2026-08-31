@@ -1,0 +1,19 @@
+<div class="glyph-recipe-groups">
+  {{#each groups as |group|}}
+    <section class="glyph-recipe-group">
+      <h3>{{group.category}}</h3>
+      <div class="glyph-recipe-rows">
+        {{#each group.recipes as |recipe|}}
+          <div class="glyph-recipe-row">
+            <div class="glyph-recipe-info">
+              <span class="glyph-recipe-name">{{recipe.name}}</span>
+              <p class="hint">{{recipe.hint}}</p>
+            </div>
+            <button type="button" data-action="apply"
+              data-recipe-id="{{recipe.id}}">{{localize "GLYPH.RECIPES.apply"}}</button>
+          </div>
+        {{/each}}
+      </div>
+    </section>
+  {{/each}}
+</div>
