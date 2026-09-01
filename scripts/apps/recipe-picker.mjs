@@ -23,7 +23,7 @@ export class RecipePicker extends HandlebarsApplicationMixin(ApplicationV2) {
     tag: 'div',
     classes: ['glyph', 'glyph-recipe-picker'],
     window: { title: 'GLYPH.RECIPES.label', icon: 'fa-solid fa-wand-magic-sparkles' },
-    position: { width: 420, height: 'auto' },
+    position: { width: 420, height: 600 },
     actions: { apply: RecipePicker.#onApply }
   };
 
