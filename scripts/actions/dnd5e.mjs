@@ -1,6 +1,6 @@
 import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { resolveReference } from '../targeting.mjs';
+import { resolveActorReference, resolveReference } from '../targeting.mjs';
 
 /** dnd5e-only */
 export function registerDnd5eActions() {
@@ -45,7 +45,7 @@ export function registerDnd5eActions() {
     label: 'GLYPH.ACTIONS.hurtHeal.label',
     hint: 'GLYPH.ACTIONS.hurtHeal.hint',
     fields: [
-      { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.hurtHeal.FIELDS.actor.label', required: true },
+      { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.hurtHeal.FIELDS.actor.label', required: true },
       { name: 'value', widget: 'number', label: 'GLYPH.ACTIONS.hurtHeal.FIELDS.value.label', hint: 'GLYPH.ACTIONS.hurtHeal.FIELDS.value.hint', required: true }
     ],
     validate(node) {
@@ -53,7 +53,7 @@ export function registerDnd5eActions() {
       if (typeof node.value !== 'number') throw new Error('hurtHeal.value must be a number.');
     },
     async execute(node, context) {
-      const actor = resolveReference(node.actor, context);
+      const actor = resolveActorReference(node.actor, context);
       if (actor) await actor.applyDamage(node.value);
     }
   });

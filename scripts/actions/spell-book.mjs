@@ -19,7 +19,7 @@ export function registerSpellBookActions() {
     hint: 'GLYPH.ACTIONS.learnSpellFromScroll.hint',
     fields: [
       { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.learnSpellFromScroll.FIELDS.actor.label', required: true },
-      { name: 'classId', widget: 'text', label: 'GLYPH.ACTIONS.learnSpellFromScroll.FIELDS.classId.label', required: true },
+      { name: 'classId', widget: 'text', label: 'GLYPH.ACTIONS.learnSpellFromScroll.FIELDS.classId.label', hint: 'GLYPH.ACTIONS.learnSpellFromScroll.FIELDS.classId.hint', required: true },
       { name: 'scroll', widget: 'reference', label: 'GLYPH.ACTIONS.learnSpellFromScroll.FIELDS.scroll.label', required: true }
     ],
     validate(node) {

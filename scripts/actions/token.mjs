@@ -1,5 +1,5 @@
 import { registerNodeType } from '../nodes/registry.mjs';
-import { resolveReference } from '../targeting.mjs';
+import { resolveActorReference, resolveReference } from '../targeting.mjs';
 
 registerNodeType('moveToken', {
   category: 'token',
@@ -7,7 +7,7 @@ registerNodeType('moveToken', {
   hint: 'GLYPH.ACTIONS.moveToken.hint',
   fields: [
     { name: 'token', widget: 'reference', label: 'GLYPH.ACTIONS.moveToken.FIELDS.token.label', required: true },
-    { name: 'destination', widget: 'point', label: 'GLYPH.ACTIONS.moveToken.FIELDS.destination.label', required: true },
+    { name: 'destination', widget: 'point', label: 'GLYPH.ACTIONS.moveToken.FIELDS.destination.label', hint: 'GLYPH.ACTIONS.FIELDS.worldPoint.hint', required: true },
     { name: 'snap', widget: 'boolean', label: 'GLYPH.ACTIONS.moveToken.FIELDS.snap.label', hint: 'GLYPH.ACTIONS.moveToken.FIELDS.snap.hint' }
   ],
   validate(node) {
@@ -78,7 +78,7 @@ registerNodeType('alter', {
   fields: [
     { name: 'target', widget: 'reference', label: 'GLYPH.ACTIONS.alter.FIELDS.target.label', required: true },
     { name: 'path', widget: 'text', label: 'GLYPH.ACTIONS.alter.FIELDS.path.label', hint: 'GLYPH.ACTIONS.alter.FIELDS.path.hint', required: true },
-    { name: 'value', widget: 'json', label: 'GLYPH.ACTIONS.alter.FIELDS.value.label' }
+    { name: 'value', widget: 'json', label: 'GLYPH.ACTIONS.alter.FIELDS.value.label', hint: 'GLYPH.ACTIONS.alter.FIELDS.value.hint' }
   ],
   validate(node) {
     if (typeof node.path !== 'string' || !node.path) throw new Error('alter.path must be a non-empty string.');
@@ -123,14 +123,14 @@ registerNodeType('addItem', {
   label: 'GLYPH.ACTIONS.addItem.label',
   hint: 'GLYPH.ACTIONS.addItem.hint',
   fields: [
-    { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.addItem.FIELDS.actor.label', required: true },
+    { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.addItem.FIELDS.actor.label', required: true },
     { name: 'itemUuid', widget: 'uuid', documentType: 'Item', label: 'GLYPH.ACTIONS.addItem.FIELDS.itemUuid.label', required: true }
   ],
   validate(node) {
     if (typeof node.itemUuid !== 'string' || !node.itemUuid) throw new Error('addItem.itemUuid must be a non-empty string.');
   },
   async execute(node, context) {
-    const actor = resolveReference(node.actor, context);
+    const actor = resolveActorReference(node.actor, context);
     const item = await fromUuid(node.itemUuid);
     if (actor && item) await actor.createEmbeddedDocuments('Item', [item.toObject()]);
   }
@@ -141,14 +141,14 @@ registerNodeType('removeItem', {
   label: 'GLYPH.ACTIONS.removeItem.label',
   hint: 'GLYPH.ACTIONS.removeItem.hint',
   fields: [
-    { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.removeItem.FIELDS.actor.label', required: true },
-    { name: 'itemName', widget: 'text', label: 'GLYPH.ACTIONS.removeItem.FIELDS.itemName.label', required: true }
+    { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.removeItem.FIELDS.actor.label', required: true },
+    { name: 'itemName', widget: 'text', label: 'GLYPH.ACTIONS.removeItem.FIELDS.itemName.label', hint: 'GLYPH.ACTIONS.removeItem.FIELDS.itemName.hint', required: true }
   ],
   validate(node) {
     if (typeof node.itemName !== 'string' || !node.itemName) throw new Error('removeItem.itemName must be a non-empty string.');
   },
   async execute(node, context) {
-    const actor = resolveReference(node.actor, context);
+    const actor = resolveActorReference(node.actor, context);
     const item = actor?.items.find((i) => i.name === node.itemName);
     if (item) await item.delete();
   }
@@ -159,7 +159,7 @@ registerNodeType('toggleCondition', {
   label: 'GLYPH.ACTIONS.toggleCondition.label',
   hint: 'GLYPH.ACTIONS.toggleCondition.hint',
   fields: [
-    { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.toggleCondition.FIELDS.actor.label', required: true },
+    { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.toggleCondition.FIELDS.actor.label', required: true },
     { name: 'statusId', widget: 'statusEffect', label: 'GLYPH.ACTIONS.toggleCondition.FIELDS.statusId.label' },
     { name: 'active', widget: 'boolean', label: 'GLYPH.ACTIONS.toggleCondition.FIELDS.active.label' },
     { name: 'clearAll', widget: 'boolean', label: 'GLYPH.ACTIONS.toggleCondition.FIELDS.clearAll.label', hint: 'GLYPH.ACTIONS.toggleCondition.FIELDS.clearAll.hint' }
@@ -168,7 +168,7 @@ registerNodeType('toggleCondition', {
     if (!node.clearAll && (typeof node.statusId !== 'string' || !node.statusId)) throw new Error('toggleCondition.statusId must be a non-empty string unless clearAll is set.');
   },
   async execute(node, context) {
-    const actor = resolveReference(node.actor, context);
+    const actor = resolveActorReference(node.actor, context);
     if (!actor) return;
     if (node.clearAll) {
       const ids = actor.effects.filter((e) => e.statuses.size > 0).map((e) => e.id);

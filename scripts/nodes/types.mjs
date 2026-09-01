@@ -130,7 +130,7 @@ registerNodeType('forEach', {
       }
     },
     { name: 'pickPath', widget: 'text', label: 'GLYPH.NODES.forEach.FIELDS.pickPath.label', hint: 'GLYPH.NODES.forEach.FIELDS.pickPath.hint' },
-    { name: 'pickIndex', widget: 'number', min: 0, label: 'GLYPH.NODES.forEach.FIELDS.pickIndex.label' }
+    { name: 'pickIndex', widget: 'number', min: 0, label: 'GLYPH.NODES.forEach.FIELDS.pickIndex.label', hint: 'GLYPH.NODES.forEach.FIELDS.pickIndex.hint' }
   ],
   slots: [{ name: 'body', label: 'GLYPH.NODES.forEach.SLOTS.body' }],
   validate(node) {

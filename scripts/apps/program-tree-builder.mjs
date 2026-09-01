@@ -32,9 +32,10 @@ export function esc(value) {
  * @param {*} value The field's current value.
  * @param {string} path The dotted path to this field's owning node.
  * @param {{handlerNames: string[], landingTags: Set<string>}} ui Shared render-time context.
+ * @param {object} node The owning node instance, for widgets that read a sibling field.
  * @returns {string} The widget's HTML.
  */
-function renderWidget(field, value, path, ui) {
+function renderWidget(field, value, path, ui, node) {
   const attrs = `data-path="${path}" data-field="${field.name}" data-widget="${field.widget}"${field.numeric ? ' data-numeric="true"' : ''}`;
   switch (field.widget) {
     case 'textarea':
@@ -57,6 +58,24 @@ function renderWidget(field, value, path, ui) {
       return `<input type="text" ${attrs} value="${esc(typeof value === 'string' ? value : JSON.stringify(value ?? ''))}">`;
     case 'uuid':
       return `<document-tags ${attrs} type="${field.documentType ?? ''}" single value="${esc(value)}"></document-tags>`;
+    case 'journalAnchor': {
+      const entry = node.uuid ? fromUuidSync(node.uuid) : null;
+      const pages = entry instanceof JournalEntry ? entry.pages.filter((p) => p.type === 'text').sort((a, b) => a.sort - b.sort) : [];
+      const optgroups = pages
+        .map((page) => {
+          const headings = Object.values(page.toc).sort((a, b) => a.order - b.order);
+          const pageOption = `<option value="${esc(page.id)}" ${value === page.id ? 'selected' : ''}>${_loc('GLYPH.ACTIONS.openJournal.FIELDS.anchor.pageTop')}</option>`;
+          const headingOptions = headings
+            .map((h) => `<option value="${esc(`${page.id}#${h.slug}`)}" ${value === `${page.id}#${h.slug}` ? 'selected' : ''}>${'  '.repeat(h.level - 1)}${esc(h.text)}</option>`)
+            .join('');
+          return `<optgroup label="${esc(page.name)}">${pageOption}${headingOptions}</optgroup>`;
+        })
+        .join('');
+      return `<select ${attrs}>
+        <option value="" ${!value ? 'selected' : ''}>${_loc('GLYPH.ACTIONS.openJournal.FIELDS.anchor.none')}</option>
+        ${optgroups}
+      </select>`;
+    }
     case 'file': {
       const input = new foundry.data.fields.FilePathField({ categories: [(field.filePickerType ?? 'image').toUpperCase()] }).toInput({ value: value ?? '' });
       input.removeAttribute('name');
@@ -108,13 +127,17 @@ function renderWidget(field, value, path, ui) {
       const ref = value && typeof value === 'object' ? value : { kind: 'uuid', value: '' };
       const kindSelect = `<select data-path="${path}.kind" data-field="kind" class="glyph-ref-kind">
         <option value="uuid" ${ref.kind === 'uuid' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.uuid')}</option>
+        <option value="triggerToken" ${ref.kind === 'triggerToken' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.triggerToken')}</option>
+        <option value="triggerActor" ${ref.kind === 'triggerActor' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.triggerActor')}</option>
         <option value="context" ${ref.kind === 'context' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.context')}</option>
       </select>`;
       const valueInput =
         ref.kind === 'context'
           ? `<input type="text" data-path="${path}.value" data-field="value" value="${esc(ref.value)}" placeholder="variables.myVar">`
-          : `<document-tags data-path="${path}.value" data-field="value" single value="${esc(ref.value)}"></document-tags>`;
-      return `<div class="glyph-reference">${kindSelect}${valueInput}</div>`;
+          : ref.kind === 'uuid'
+            ? `<document-tags data-path="${path}.value" data-field="value" type="${field.documentType ?? ''}" single value="${esc(ref.value)}"></document-tags>`
+            : '';
+      return `<div class="glyph-reference" data-document-type="${field.documentType ?? ''}">${kindSelect}${valueInput}</div>`;
     }
     case 'expression':
       return `<input type="text" ${attrs} value="${esc(value)}" placeholder='{{event.data.token.name}} == "Goblin"'>`;
@@ -136,14 +159,16 @@ function renderWidget(field, value, path, ui) {
  */
 function renderFields(definition, node, path, ui) {
   return (definition.fields ?? [])
-    .map(
-      (field) => `
+    .map((field) => {
+      const value = node[field.name];
+      const hint = field.widget === 'reference' ? _loc(`GLYPH.REFERENCE_KIND_HINT.${value && typeof value === 'object' ? value.kind : 'uuid'}`) : field.hint ? _loc(field.hint) : null;
+      return `
     <div class="form-group glyph-node-field">
       <label>${_loc(field.label)}${field.required ? ' *' : ''}</label>
-      <div class="form-fields">${renderWidget(field, node[field.name], `${path ? `${path}.` : ''}${field.name}`, ui)}</div>
-      ${field.hint ? `<p class="hint">${_loc(field.hint)}</p>` : ''}
-    </div>`
-    )
+      <div class="form-fields">${renderWidget(field, value, `${path ? `${path}.` : ''}${field.name}`, ui, node)}</div>
+      ${hint ? `<p class="hint">${hint}</p>` : ''}
+    </div>`;
+    })
     .join('');
 }
 

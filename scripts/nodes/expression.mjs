@@ -2,7 +2,7 @@ import { isModuleActive } from '../capability.mjs';
 import { MODULE } from '../constants.mjs';
 import { canSee, distanceTo, hasCondition } from '../predicates.mjs';
 import { resolvePath } from '../run-context.mjs';
-import { resolveCollection, resolveReference } from '../targeting.mjs';
+import { resolveCollection, resolveReference, toActor } from '../targeting.mjs';
 
 const OPERATORS = {
   '==': (a, b) => a === b,
@@ -14,16 +14,6 @@ const OPERATORS = {
 };
 
 const OPERATOR_PATTERN = /\s*(==|!=|>=|<=|>|<)\s*/;
-
-/**
- * A TokenDocument (or Actor) reference to the Actor it represents.
- * @param {*} ref A resolved operand.
- * @returns {Actor|null}
- */
-function toActor(ref) {
-  if (ref instanceof Actor) return ref;
-  return ref?.actor ?? null;
-}
 
 /**
  * A TokenDocument (or plain point) reference to a measurable point.
@@ -65,7 +55,7 @@ function toEdgePoint(ref, towards) {
  * @returns {RegionBehavior|null}
  */
 function toVariableBehavior(ref, context) {
-  const behavior = ref instanceof RegionBehavior ? ref : typeof ref === 'string' && ref ? foundry.utils.fromUuidSync(ref) : (context.info.behavior ?? null);
+  const behavior = ref instanceof RegionBehavior ? ref : typeof ref === 'string' && ref ? fromUuidSync(ref) : (context.info.behavior ?? null);
   return behavior instanceof RegionBehavior ? behavior : null;
 }
 

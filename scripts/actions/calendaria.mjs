@@ -1,6 +1,7 @@
 import { isModuleActive } from '../capability.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { interpolate } from '../run-context.mjs';
+import { INTERPOLATED_TEXT_HINT } from './messaging.mjs';
 
 /** Calendaria */
 export function registerCalendariaActions() {
@@ -23,8 +24,8 @@ export function registerCalendariaActions() {
     label: 'GLYPH.ACTIONS.createCalendarNote.label',
     hint: 'GLYPH.ACTIONS.createCalendarNote.hint',
     fields: [
-      { name: 'name', widget: 'text', label: 'GLYPH.ACTIONS.createCalendarNote.FIELDS.name.label', required: true },
-      { name: 'content', widget: 'textarea', label: 'GLYPH.ACTIONS.createCalendarNote.FIELDS.content.label' }
+      { name: 'name', widget: 'text', label: 'GLYPH.ACTIONS.createCalendarNote.FIELDS.name.label', hint: INTERPOLATED_TEXT_HINT, required: true },
+      { name: 'content', widget: 'textarea', label: 'GLYPH.ACTIONS.createCalendarNote.FIELDS.content.label', hint: INTERPOLATED_TEXT_HINT }
     ],
     validate(node) {
       if (typeof node.name !== 'string' || !node.name) throw new Error('createCalendarNote.name must be a non-empty string.');

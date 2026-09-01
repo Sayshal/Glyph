@@ -6,7 +6,7 @@ import { interpolate } from '../run-context.mjs';
 import { resolveReference } from '../targeting.mjs';
 
 /** @type {string} Shared hint for a text field that interpolates `{{path}}` placeholders. */
-const INTERPOLATED_TEXT_HINT = 'GLYPH.ACTIONS.FIELDS.interpolatedText.hint';
+export const INTERPOLATED_TEXT_HINT = 'GLYPH.ACTIONS.FIELDS.interpolatedText.hint';
 
 /** @type {object} The shared "who sees this" field, added to every player-facing render action. */
 export const AUDIENCE_FIELD = {
@@ -24,7 +24,11 @@ registerRenderIntent('showImage', ({ src, caption }) => {
 registerRenderIntent('openJournal', async ({ uuid, anchor }) => {
   const target = await fromUuid(uuid);
   if (target instanceof JournalEntryPage) target.parent.sheet.render({ force: true, pageId: target.id, anchor });
-  else if (target instanceof JournalEntry) target.sheet.render({ force: true });
+  else if (target instanceof JournalEntry) {
+    if (!anchor) return target.sheet.render({ force: true });
+    const [pageId, slug] = anchor.split('#');
+    target.sheet.render({ force: true, pageId, anchor: slug });
+  }
 });
 
 registerRenderIntent('openActorSheet', async ({ uuid }) => {
@@ -50,7 +54,11 @@ registerNodeType('chatMessage', {
   },
   async execute(node, context) {
     const token = context.info.event.data?.token?.object ?? null;
-    const chatData = { content: interpolate(node.text, context), speaker: token ? ChatMessage.getSpeaker({ token }) : ChatMessage.getSpeaker() };
+    const chatData = {
+      content: interpolate(node.text, context),
+      speaker: token ? ChatMessage.getSpeaker({ token }) : ChatMessage.getSpeaker(),
+      author: context.info.event.user?.id
+    };
     ChatMessage.applyMode(chatData, node.rollMode);
     await ChatMessage.create(chatData);
   }
@@ -157,8 +165,8 @@ registerNodeType('openJournal', {
   label: 'GLYPH.ACTIONS.openJournal.label',
   hint: 'GLYPH.ACTIONS.openJournal.hint',
   fields: [
-    { name: 'uuid', widget: 'uuid', documentType: 'JournalEntry', label: 'GLYPH.ACTIONS.openJournal.FIELDS.uuid.label', required: true },
-    { name: 'anchor', widget: 'text', label: 'GLYPH.ACTIONS.openJournal.FIELDS.anchor.label' },
+    { name: 'uuid', widget: 'uuid', documentType: 'JournalEntry', label: 'GLYPH.ACTIONS.openJournal.FIELDS.uuid.label', required: true, hint: 'GLYPH.ACTIONS.openJournal.FIELDS.uuid.hint' },
+    { name: 'anchor', widget: 'journalAnchor', label: 'GLYPH.ACTIONS.openJournal.FIELDS.anchor.label', hint: 'GLYPH.ACTIONS.openJournal.FIELDS.anchor.hint' },
     AUDIENCE_FIELD
   ],
   validate(node) {

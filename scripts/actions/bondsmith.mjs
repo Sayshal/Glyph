@@ -18,7 +18,7 @@ export function registerBondsmithActions() {
         required: true,
         choices: { actor: 'GLYPH.BONDSMITH_ENTITY.actor', faction: 'GLYPH.BONDSMITH_ENTITY.faction' }
       },
-      { name: 'value', widget: 'number', label: 'GLYPH.ACTIONS.bondsmithReputation.FIELDS.value.label', required: true }
+      { name: 'value', widget: 'number', label: 'GLYPH.ACTIONS.bondsmithReputation.FIELDS.value.label', hint: 'GLYPH.ACTIONS.bondsmithReputation.FIELDS.value.hint', required: true }
     ],
     validate(node) {
       if (typeof node.id !== 'string' || !node.id) throw new Error('bondsmithReputation.id must be a non-empty string.');
@@ -49,8 +49,8 @@ export function registerBondsmithActions() {
     hint: 'GLYPH.ACTIONS.bondsmithSetRelation.hint',
     fields: [
       { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.bondsmithSetRelation.FIELDS.actor.label', required: true },
-      { name: 'factionId', widget: 'text', label: 'GLYPH.ACTIONS.bondsmithSetRelation.FIELDS.factionId.label', required: true },
-      { name: 'value', widget: 'number', label: 'GLYPH.ACTIONS.bondsmithSetRelation.FIELDS.value.label', required: true }
+      { name: 'factionId', widget: 'text', label: 'GLYPH.ACTIONS.bondsmithSetRelation.FIELDS.factionId.label', hint: 'GLYPH.ACTIONS.bondsmithSetRelation.FIELDS.factionId.hint', required: true },
+      { name: 'value', widget: 'number', label: 'GLYPH.ACTIONS.bondsmithSetRelation.FIELDS.value.label', hint: 'GLYPH.ACTIONS.bondsmithSetRelation.FIELDS.value.hint', required: true }
     ],
     validate(node) {
       if (typeof node.actor !== 'object') throw new Error('bondsmithSetRelation.actor must be a reference object.');
@@ -69,7 +69,7 @@ export function registerBondsmithActions() {
     hint: 'GLYPH.ACTIONS.bondsmithFactionMember.hint',
     fields: [
       { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.bondsmithFactionMember.FIELDS.actor.label', required: true },
-      { name: 'factionId', widget: 'text', label: 'GLYPH.ACTIONS.bondsmithFactionMember.FIELDS.factionId.label', required: true },
+      { name: 'factionId', widget: 'text', label: 'GLYPH.ACTIONS.bondsmithFactionMember.FIELDS.factionId.label', hint: 'GLYPH.ACTIONS.bondsmithFactionMember.FIELDS.factionId.hint', required: true },
       {
         name: 'mode',
         widget: 'select',

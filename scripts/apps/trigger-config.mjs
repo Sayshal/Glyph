@@ -73,8 +73,18 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     context.templateHtml = await this._renderTemplateWidget();
     context.buttons = [{ type: 'submit', icon: 'fa-solid fa-floppy-disk', label: 'BEHAVIOR.ACTIONS.update' }];
     this._prepareProgramContext(context);
+    this._prepareVariablesContext(context);
     this._prepareHistoryContext(context);
     return context;
+  }
+
+  /**
+   * Populate the Variables tab's persisted key/value list.
+   * @param {object} context The render context, mutated in place.
+   */
+  _prepareVariablesContext(context) {
+    const variables = this.document.getFlag(MODULE.ID, 'variables') ?? [];
+    context.variableEntries = variables.map((entry, index) => ({ index, name: entry.name, valueLabel: JSON.stringify(entry.value) }));
   }
 
   /**
@@ -88,7 +98,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
         index,
         name: entry.name,
         error: entry.error ?? null,
-        timeLabel: _loc('GLYPH.HISTORY.timeAgo', { seconds: Math.max(0, game.time.worldTime - entry.time) })
+        timeLabel: foundry.utils.timeSince(new Date(entry.time))
       }))
       .reverse();
   }
@@ -157,7 +167,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   _onFirstRender(context, options) {
     super._onFirstRender(context, options);
     this.element.addEventListener('click', this.#onTreeClick.bind(this));
-    this.element.addEventListener('change', this.#onTreeChange.bind(this));
+    this.element.addEventListener('change', this.#onTreeChange.bind(this), { capture: true });
   }
 
   /** @inheritDoc */
@@ -213,6 +223,12 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       history.splice(Number(index), 1);
       return this.document.setFlag(MODULE.ID, 'history', history);
     }
+    if (lineAction === 'delete-variable') {
+      const variables = this.document.getFlag(MODULE.ID, 'variables') ?? [];
+      variables.splice(Number(index), 1);
+      return this.document.setFlag(MODULE.ID, 'variables', variables);
+    }
+    if (lineAction === 'add-variable') return this.#addVariable();
     if (lineAction === 'save-template') return this.#saveTemplate();
     if (lineAction === 'apply-template') {
       const uuid = this.element.querySelector('.glyph-template-select')?.value;
@@ -221,6 +237,28 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       this.#pendingTrees.clear();
       return this.render({ parts: ['general', 'program'] });
     }
+  }
+
+  /** Add or overwrite a persistent variable from the Variables tab's input row, upserting by name. */
+  async #addVariable() {
+    const nameInput = this.element.querySelector('.glyph-variable-name');
+    const valueInput = this.element.querySelector('.glyph-variable-value');
+    const name = nameInput.value.trim();
+    if (!name) return;
+    let value;
+    try {
+      value = valueInput.value === '' ? '' : JSON.parse(valueInput.value);
+    } catch {
+      value = valueInput.value;
+    }
+    const variables = [...(this.document.getFlag(MODULE.ID, 'variables') ?? [])];
+    const index = variables.findIndex((entry) => entry.name === name);
+    const record = { name, value };
+    if (index === -1) variables.push(record);
+    else variables[index] = record;
+    await this.document.setFlag(MODULE.ID, 'variables', variables);
+    nameInput.value = '';
+    valueInput.value = '';
   }
 
   /** Prompt for a name and save this behavior's configuration as a reusable template. */
@@ -281,15 +319,19 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   async #onTreeChange(event) {
     const target = event.target;
     if (target.matches('.glyph-handler-select')) {
+      event.stopPropagation();
       this.#selectedHandler = target.value;
       return this.render({ parts: ['program'] });
     }
     if (target.matches('.glyph-linked-tile')) {
+      event.stopPropagation();
       const uuid = target.value || null;
       return this.document.update({ 'system.linkedTile': uuid ? { kind: 'uuid', value: uuid } : null });
     }
+    if (target.matches('.glyph-ref-kind')) this.#syncReferenceKind(target);
     const { path, widget, numeric } = target.dataset;
     if (!path) return;
+    event.stopPropagation();
     let value;
     if (target.tagName === 'SELECT' && target.multiple) value = [...target.selectedOptions].map((o) => o.value);
     else if (target.type === 'checkbox') value = target.checked;
@@ -302,7 +344,35 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       }
     } else if (numeric && Array.isArray(value)) value = value.map(Number);
     else if (target.type === 'number') value = Number(value);
-    await this.#mutateHandler((tree) => foundry.utils.setProperty(tree, path, value));
+    await this.#mutateHandler((tree) => {
+      if (path.endsWith('.kind') || path.endsWith('.value')) {
+        const parentPath = path.slice(0, path.lastIndexOf('.'));
+        if (typeof foundry.utils.getProperty(tree, parentPath) !== 'object') foundry.utils.setProperty(tree, parentPath, { kind: 'uuid', value: '' });
+      }
+      foundry.utils.setProperty(tree, path, value);
+    });
+  }
+
+  /**
+   * Refresh a reference field's hint and value input the instant its kind changes.
+   * @param {HTMLSelectElement} select The `.glyph-ref-kind` select that just changed.
+   */
+  #syncReferenceKind(select) {
+    const wrap = select.closest('.glyph-reference');
+    if (!wrap) return;
+    const kind = select.value;
+    const basePath = select.dataset.path.replace(/\.kind$/, '');
+    const hint = select.closest('.glyph-node-field')?.querySelector('.hint');
+    if (hint) hint.textContent = _loc(`GLYPH.REFERENCE_KIND_HINT.${kind}`);
+    const replacement =
+      kind === 'context'
+        ? `<input type="text" data-path="${basePath}.value" data-field="value" value="" placeholder="variables.myVar">`
+        : kind === 'uuid'
+          ? `<document-tags data-path="${basePath}.value" data-field="value" type="${wrap.dataset.documentType ?? ''}" single value=""></document-tags>`
+          : '';
+    const valueField = wrap.querySelector('[data-field="value"]');
+    if (valueField) valueField.outerHTML = replacement;
+    else if (replacement) select.insertAdjacentHTML('afterend', replacement);
   }
 
   /**

@@ -11,17 +11,6 @@ export function getAtPath(root, path) {
 }
 
 /**
- * Write a scalar value at a dotted path. Cannot target the root itself.
- * @param {object} root The handler's root node.
- * @param {string} path A non-empty dotted path.
- * @param {*} value The value to write.
- */
-export function setAtPath(root, path, value) {
-  if (!path) throw new Error('setAtPath cannot replace the root node.');
-  foundry.utils.setProperty(root, path, value);
-}
-
-/**
  * Split a dotted path into its parent path and final key.
  * @param {string} path A non-empty dotted path.
  * @returns {{parentPath: string, key: string}}
@@ -63,7 +52,8 @@ export function moveAtPath(root, path, offset) {
 const WIDGET_DEFAULTS = {
   boolean: false,
   number: 0,
-  multiSelect: []
+  multiSelect: [],
+  reference: { kind: 'uuid', value: '' }
 };
 
 /**

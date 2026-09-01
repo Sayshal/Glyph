@@ -69,9 +69,9 @@ registerNodeType('changeTileImage', {
         index: 'GLYPH.IMAGE_SELECT.index'
       }
     },
-    { name: 'src', widget: 'file', filePickerType: 'image', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.src.label' },
+    { name: 'src', widget: 'file', filePickerType: 'image', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.src.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.src.hint' },
     { name: 'images', widget: 'json', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.images.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.images.hint' },
-    { name: 'index', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.index.label' },
+    { name: 'index', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.index.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.index.hint' },
     { name: 'randomRange', widget: 'text', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.randomRange.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.randomRange.hint' },
     {
       name: 'transition',

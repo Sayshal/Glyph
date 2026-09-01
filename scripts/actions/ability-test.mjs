@@ -1,23 +1,13 @@
 import { getAbilityTestAdapter } from '../ability-test-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { resolveReference } from '../targeting.mjs';
-
-/**
- * A TokenDocument (or Actor) reference to the Actor it represents.
- * @param {*} ref A resolved reference.
- * @returns {Actor|null}
- */
-function toActor(ref) {
-  if (ref instanceof Actor) return ref;
-  return ref?.actor ?? null;
-}
+import { resolveActorReference } from '../targeting.mjs';
 
 registerNodeType('abilityTest', {
   category: 'token',
   label: 'GLYPH.ACTIONS.abilityTest.label',
   hint: 'GLYPH.ACTIONS.abilityTest.hint',
   fields: [
-    { name: 'actor', widget: 'reference', label: 'GLYPH.ACTIONS.abilityTest.FIELDS.actor.label', required: true },
+    { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.abilityTest.FIELDS.actor.label', required: true },
     {
       name: 'type',
       widget: 'select',
@@ -37,7 +27,7 @@ registerNodeType('abilityTest', {
   async execute(node, context) {
     const adapter = getAbilityTestAdapter();
     if (!adapter) throw new Error(`No ability-test adapter is registered for system "${game.system.id}".`);
-    const actor = toActor(resolveReference(node.actor, context));
+    const actor = resolveActorReference(node.actor, context);
     if (!actor) return;
     context.previous = await adapter(actor, node.type, node.ability, node.dc);
   }

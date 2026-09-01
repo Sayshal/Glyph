@@ -1,4 +1,25 @@
-<div class="tab scrollable glyph-tab-placeholder{{#if tab.active}} active{{/if}}" data-group="{{tab.group}}"
+<div class="tab scrollable glyph-variables-tab{{#if tab.active}} active{{/if}}" data-group="{{tab.group}}"
   data-tab="{{tab.id}}">
-  <p class="hint">{{localize "GLYPH.PLACEHOLDER.variables"}}</p>
+  {{#if variableEntries.length}}
+    <ul class="glyph-variables-list">
+      {{#each variableEntries as |entry|}}
+        <li class="glyph-variables-row">
+          <span class="glyph-variables-name">{{entry.name}}</span>
+          <span class="glyph-variables-value">{{entry.valueLabel}}</span>
+          <button type="button" data-line-action="delete-variable" data-index="{{entry.index}}"
+            aria-label="{{localize 'GLYPH.TREE.delete'}}" data-tooltip>
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </li>
+      {{/each}}
+    </ul>
+  {{else}}
+    <p class="hint">{{localize "GLYPH.VARIABLES.empty"}}</p>
+  {{/if}}
+  <div class="glyph-variables-add">
+    <input type="text" class="glyph-variable-name" placeholder="{{localize 'GLYPH.VARIABLES.namePlaceholder'}}">
+    <input type="text" class="glyph-variable-value" placeholder="{{localize 'GLYPH.VARIABLES.valuePlaceholder'}}">
+    <button type="button" data-line-action="add-variable">{{localize 'GLYPH.VARIABLES.add'}}</button>
+  </div>
+  <p class="hint">{{localize "GLYPH.VARIABLES.hint"}}</p>
 </div>

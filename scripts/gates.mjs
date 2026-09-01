@@ -91,7 +91,7 @@ const HISTORY_CAP = 50;
 async function recordSuccess(behavior, event) {
   const history = behavior.getFlag(MODULE.ID, 'history') ?? [];
   const tokenId = event.data?.token?.id ?? null;
-  history.push({ tokenId, name: event.name, time: game.time.worldTime });
+  history.push({ tokenId, name: event.name, time: Date.now() });
   await behavior.update({
     [`flags.${MODULE.ID}.lastTriggered`]: game.time.worldTime,
     [`flags.${MODULE.ID}.history`]: history.slice(-HISTORY_CAP)
@@ -108,6 +108,6 @@ async function recordSuccess(behavior, event) {
 export async function recordFailure(behavior, event, error) {
   const history = behavior.getFlag(MODULE.ID, 'history') ?? [];
   const tokenId = event.data?.token?.id ?? null;
-  history.push({ tokenId, name: event.name, time: game.time.worldTime, error: error.message });
+  history.push({ tokenId, name: event.name, time: Date.now(), error: error.message });
   await behavior.setFlag(MODULE.ID, 'history', history.slice(-HISTORY_CAP));
 }

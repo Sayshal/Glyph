@@ -10,7 +10,7 @@ export function registerMindfulEncountersActions() {
     hint: 'GLYPH.ACTIONS.setDungeonTurnActive.hint',
     fields: [
       { name: 'active', widget: 'boolean', label: 'GLYPH.ACTIONS.setDungeonTurnActive.FIELDS.active.label' },
-      { name: 'overland', widget: 'boolean', label: 'GLYPH.ACTIONS.setDungeonTurnActive.FIELDS.overland.label' }
+      { name: 'overland', widget: 'boolean', label: 'GLYPH.ACTIONS.setDungeonTurnActive.FIELDS.overland.label', hint: 'GLYPH.ACTIONS.setDungeonTurnActive.FIELDS.overland.hint' }
     ],
     async execute(node, context) {
       const scene = context.info.scene;

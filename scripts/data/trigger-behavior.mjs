@@ -6,12 +6,11 @@ import '../nodes/types.mjs';
 import { registerRenderIntent, sendRenderIntent } from '../render-intent.mjs';
 import { createRunContext } from '../run-context.mjs';
 import { normalizeRunSource } from '../run-source.mjs';
-import { createReferenceField } from './reference-field.mjs';
 
 registerRenderIntent('triggerFailed', ({ region, error }) => ui.notifications.error('GLYPH.NOTIFICATIONS.TriggerFailed', { format: { region, error } }));
 
-/** @type {Set<string>} Behavior UUIDs with a run currently in flight, so a `wait` node holding one open can't overlap with a second trigger on the same behavior. */
-const activeRuns = new Set();
+/** @type {Map<string, Promise>} Per-behavior promise chain tail, so overlapping triggers on the same behavior queue and run in order (rather than one silently dropping) - keeps a `wait` node from overlapping a second trigger too. */
+const runQueues = new Map();
 
 /** The RegionBehaviorType glyph registers as `glyph.trigger`. */
 export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.RegionBehaviorType {
@@ -67,7 +66,14 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
       pertoken: new fields.BooleanField({ initial: false }),
       vision: new fields.BooleanField({ initial: false }),
       allowPaused: new fields.BooleanField({ initial: false }),
-      linkedTile: createReferenceField({ required: false, nullable: true, initial: null }),
+      linkedTile: new fields.SchemaField(
+        {
+          kind: new fields.StringField({ required: true, blank: false, choices: ['uuid', 'tag', 'context'] }),
+          value: new fields.StringField({ required: true, blank: false }),
+          scope: new fields.StringField({ required: false, blank: true })
+        },
+        { required: false, nullable: true, initial: null }
+      ),
       handlers: new ProgramField({ required: true, initial: {} })
     };
   }
@@ -94,14 +100,22 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
       ATLAS.log(2, `Glyph: "${source.event.name}" fired on Region "${source.region.name}" with no handler configured.`);
       return;
     }
+    const uuid = this.parent.uuid;
+    const tail = (runQueues.get(uuid) ?? Promise.resolve()).then(() => this.#runQueued(source, handler)).catch(() => {});
+    runQueues.set(uuid, tail);
+    await tail;
+    if (runQueues.get(uuid) === tail) runQueues.delete(uuid);
+  }
+
+  /**
+   * Gate and execute one already-queued trigger.
+   * @param {import('../run-source.mjs').RunSource} source The normalized run source.
+   * @param {object} handler The handler tree to run.
+   * @returns {Promise<void>}
+   */
+  async #runQueued(source, handler) {
     if (!(await checkGates(this.parent, source.event))) return;
     if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, this.parent, source.event) === false) return;
-    const uuid = this.parent.uuid;
-    if (activeRuns.has(uuid)) {
-      ATLAS.log(3, `Glyph: "${source.event.name}" on Region "${source.region.name}" skipped - a run is already in progress.`);
-      return;
-    }
-    activeRuns.add(uuid);
     try {
       await runNode(handler, createRunContext(source, this.parent));
     } catch (error) {
@@ -109,8 +123,6 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
       await recordFailure(this.parent, source.event, error);
       await sendRenderIntent(source.event.user, 'triggerFailed', { region: source.region.name, error: error.message });
       return;
-    } finally {
-      activeRuns.delete(uuid);
     }
     Hooks.callAll(MODULE.HOOKS.TRIGGER, this.parent, source.event);
   }

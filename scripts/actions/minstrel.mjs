@@ -9,7 +9,7 @@ export function registerMinstrelActions() {
     label: 'GLYPH.ACTIONS.minstrelMood.label',
     hint: 'GLYPH.ACTIONS.minstrelMood.hint',
     fields: [
-      { name: 'moodId', widget: 'text', label: 'GLYPH.ACTIONS.minstrelMood.FIELDS.moodId.label' },
+      { name: 'moodId', widget: 'text', label: 'GLYPH.ACTIONS.minstrelMood.FIELDS.moodId.label', hint: 'GLYPH.ACTIONS.minstrelMood.FIELDS.moodId.hint' },
       {
         name: 'mode',
         widget: 'select',
@@ -28,7 +28,7 @@ export function registerMinstrelActions() {
     category: 'scene',
     label: 'GLYPH.ACTIONS.minstrelSoundboard.label',
     hint: 'GLYPH.ACTIONS.minstrelSoundboard.hint',
-    fields: [{ name: 'padId', widget: 'text', label: 'GLYPH.ACTIONS.minstrelSoundboard.FIELDS.padId.label', required: true }],
+    fields: [{ name: 'padId', widget: 'text', label: 'GLYPH.ACTIONS.minstrelSoundboard.FIELDS.padId.label', hint: 'GLYPH.ACTIONS.minstrelSoundboard.FIELDS.padId.hint', required: true }],
     validate(node) {
       if (typeof node.padId !== 'string' || !node.padId) throw new Error('minstrelSoundboard.padId must be a non-empty string.');
     },
