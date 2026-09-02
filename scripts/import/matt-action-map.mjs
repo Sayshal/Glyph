@@ -327,11 +327,10 @@ export const ACTION_MAP = {
       target: requireRef(data.entity),
       text: data.text,
       duration: data.duration ? Number(data.duration) : undefined,
-      anchor: ['center', 'bottom', 'top', 'left', 'right'].includes(data.anchor) ? data.anchor : undefined,
-      direction: ['center', 'bottom', 'top', 'left', 'right'].includes(data.direction) ? data.direction : undefined,
+      anchor: ['center', 'bottom', 'top', 'left', 'right'][Number(data.anchor)],
+      direction: ['center', 'bottom', 'top', 'left', 'right'][Number(data.direction)],
       audience: audienceFromShowto(data.for)
-    }),
-    partial: 'Anchor/direction were matched by best guess - check the text moves the direction you expect.'
+    })
   },
   preload: { convert: (data) => ({ type: 'preloadScene', sceneUuid: requireUuid(data.entity) }) },
   append: {
