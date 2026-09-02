@@ -10,8 +10,8 @@ const MAX_ITERATIONS = 1000;
 /**
  * Narrow a resolved item list to exactly one item, per forEach's `pick` mode.
  * @param {object[]} items The filtered/limited item list.
- * @param {string} mode One of "first"/"last"/"random"/"min"/"max"/"index".
- * @param {string} [path] The dot-path compared for "min"/"max".
+ * @param {string} mode One of "first"/"last"/"random"/"min"/"max"/"minName"/"maxName"/"index".
+ * @param {string} [path] The dot-path compared for "min"/"max"/"minName"/"maxName".
  * @param {number} [index] The index used for "index".
  * @returns {object[]} Zero or one items.
  */
@@ -24,6 +24,10 @@ function pickOne(items, mode, path, index) {
   if (mode === 'min' || mode === 'max') {
     const valueOf = (item) => Number(foundry.utils.getProperty(item, path ?? '')) || 0;
     return [items.reduce((best, item) => ((mode === 'min' ? valueOf(item) < valueOf(best) : valueOf(item) > valueOf(best)) ? item : best))];
+  }
+  if (mode === 'minName' || mode === 'maxName') {
+    const valueOf = (item) => String(foundry.utils.getProperty(item, path || 'name') ?? '');
+    return [items.reduce((best, item) => ((mode === 'minName' ? valueOf(item) < valueOf(best) : valueOf(item) > valueOf(best)) ? item : best))];
   }
   return [items[0]];
 }
@@ -126,6 +130,8 @@ registerNodeType('forEach', {
         random: 'GLYPH.PICK_MODE.random',
         min: 'GLYPH.PICK_MODE.min',
         max: 'GLYPH.PICK_MODE.max',
+        minName: 'GLYPH.PICK_MODE.minName',
+        maxName: 'GLYPH.PICK_MODE.maxName',
         index: 'GLYPH.PICK_MODE.index'
       }
     },

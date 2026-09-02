@@ -394,7 +394,10 @@ export const ACTION_MAP = {
   random: { manual: 'Rebuild by hand as an If condition using chance().' },
   checkvariable: { manual: "Rebuild by hand as an If condition comparing the variable's value." },
   checkvalue: { manual: 'Relies on MATT-only internal data glyph does not have. No conversion possible.' },
-  first: { manual: "Glyph's For Each can pick one item this way - rebuild it by hand and choose the collection yourself." },
+  first: {
+    manual:
+      'This uses MATT\'s own "current" selection (Entity left as Previous/Current, or unset) rather than an explicit collection - glyph has no equivalent implicit accumulator. Rebuild by hand as a For Each choosing the collection yourself.'
+  },
   anchor: { convert: (data) => ({ type: 'landing', tag: data.tag }) },
   goto: { convert: (data) => ({ type: 'goto', tag: data.tag, limit: data.limit ? Number(data.limit) || undefined : undefined }) },
   loop: { manual: 'Rebuild by hand as a For Each over the right collection.' },

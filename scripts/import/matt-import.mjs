@@ -4,6 +4,7 @@ import { validateNode } from '../nodes/types.mjs';
 import { regionShapeFromTile } from '../tile-link.mjs';
 import { ACTION_MAP, FILTER_MAP } from './matt-action-map.mjs';
 import { MODE_MAP } from './matt-modes.mjs';
+import { idOf } from './matt-sentinels.mjs';
 
 /** @type {Record<string, string>} MATT per-tile flags with a same-shape glyph field (MATT-teardown.md §2.2). */
 const FIELD_MAP = { restriction: 'restriction', chance: 'chance', minrequired: 'minRequired', cooldown: 'cooldown', pertoken: 'pertoken', vision: 'vision', allowpaused: 'allowPaused' };
@@ -70,6 +71,10 @@ function convertAction(entry, out, matt) {
 function convertActions(actions, out, matt) {
   for (let i = 0; i < actions.length; i++) {
     const entry = actions[i];
+    if (entry.action === 'first') {
+      const node = buildFirstNode(entry, actions.slice(i + 1), out, matt);
+      if (node) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), node];
+    }
     const filter = FILTER_MAP[entry.action];
     if (!filter) continue;
     const condition = filter.expression(entry.data ?? {});
@@ -86,6 +91,75 @@ function convertActions(actions, out, matt) {
     return [...before, { type: 'if', condition, then: rest }];
   }
   return actions.map((entry) => convertAction(entry, out, matt));
+}
+
+/**
+ * Resolve a MATT `first` filter's `entity` to a glyph collection resolver id - only the real
+ * multi-item collections; `token`/`previous`/`current` aren't buildable here (MATT's own implicit
+ * accumulator, out of scope - see `checkvalue`/`setcurrent`).
+ * @param {*} entity The raw MATT `entity` value.
+ * @returns {string|null} A `resolveCollection`-compatible id, or null if unbuildable.
+ */
+function tokenCollectionFromEntity(entity) {
+  const id = idOf(entity);
+  if (id === 'within' || id === 'players') return id;
+  if (id?.startsWith('tagger')) return `tag:${id.slice(7)}`;
+  return null;
+}
+
+/**
+ * Resolve a MATT `first` filter's free-text `position` field to a `forEach` pick mode.
+ * @param {*} position The raw MATT `position` value.
+ * @returns {{pick: string, pickIndex?: number}|null} The `forEach` pick fields, or null if unrecognized.
+ */
+function pickFromPosition(position) {
+  const pos = String(position ?? 'first').trim();
+  if (pos === 'first' || pos === 'last' || pos === 'random') return { pick: pos };
+  if (pos === 'min') return { pick: 'minName' };
+  if (pos === 'max') return { pick: 'maxName' };
+  const n = Number(pos);
+  return Number.isInteger(n) && n >= 1 ? { pick: 'index', pickIndex: n - 1 } : null;
+}
+
+/**
+ * Replace every `{kind:'context', value:'previous'}` reference in a program tree with `{kind:'context', value:'item'}`.
+ * @param {*} node A program node, reference object, or plain value.
+ * @returns {*} The same value, with matching references rewritten in place.
+ */
+function rewritePreviousToItem(node) {
+  if (!node || typeof node !== 'object') return node;
+  if (node.kind === 'context' && node.value === 'previous') return { kind: 'context', value: 'item' };
+  for (const [key, value] of Object.entries(node)) {
+    if (Array.isArray(value)) node[key] = value.map(rewritePreviousToItem);
+    else if (value && typeof value === 'object') node[key] = rewritePreviousToItem(value);
+  }
+  return node;
+}
+
+/**
+ * Build a `forEach` node for a MATT `first` filter with an explicit, statically-resolvable `entity` -
+ * picks one item and lifts the rest of the chain into its body, rewriting `previous`/`current`
+ * references inside to the picked item. Returns null (falls back to the existing manual stub) for
+ * the implicit "current" form (`entity` unset/`previous`/`current`) or an unrecognized `position`.
+ * @param {{action: string, data: object}} entry The MATT `first` action.
+ * @param {{action: string, data: object}[]} restEntries The remaining MATT actions in this chain.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {object|null} A `forEach` program node, or null.
+ */
+function buildFirstNode(entry, restEntries, out, matt) {
+  const data = entry.data ?? {};
+  const collection = tokenCollectionFromEntity(data.entity);
+  if (!collection) return null;
+  const pickInfo = pickFromPosition(data.position);
+  if (!pickInfo) return null;
+  out.report.push({
+    level: 'partial',
+    matt: entry,
+    note: 'Converted to a For Each that picks one item and lifts the rest of this chain into its body - any reference to MATT\'s "current"/"previous" selection downstream now points at the picked item.'
+  });
+  const body = convertActions(restEntries, out, matt).map(rewritePreviousToItem);
+  return { type: 'forEach', collection, ...pickInfo, body };
 }
 
 /**
