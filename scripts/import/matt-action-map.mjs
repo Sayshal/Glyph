@@ -591,7 +591,7 @@ function transitionFromMatt(matt) {
  * @param {string} showto The MATT audience sentinel.
  * @returns {string} A glyph audience choice.
  */
-function audienceFromShowto(showto) {
+export function audienceFromShowto(showto) {
   if (showto === 'gm') return 'gm';
   if (showto === 'players') return 'players';
   if (showto === 'trigger' || showto === 'token') return 'triggeringUser';

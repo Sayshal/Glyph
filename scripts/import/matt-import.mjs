@@ -2,7 +2,7 @@ import { MODULE } from '../constants.mjs';
 import { buildTriggerSystem } from '../data/trigger-system.mjs';
 import { validateNode } from '../nodes/types.mjs';
 import { regionShapeFromTile } from '../tile-link.mjs';
-import { ACTION_MAP, FILTER_MAP } from './matt-action-map.mjs';
+import { ACTION_MAP, FILTER_MAP, audienceFromShowto } from './matt-action-map.mjs';
 import { MODE_MAP } from './matt-modes.mjs';
 import { idOf } from './matt-sentinels.mjs';
 
@@ -82,6 +82,10 @@ function convertActions(actions, out, matt) {
     if (entry.action === 'loop') {
       const built = buildLoopNode(entry, i, actions, out, matt);
       if (built) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), built.node, ...built.rest];
+    }
+    if (entry.action === 'dialog') {
+      const node = buildDialogNode(entry, i, actions, out, matt);
+      if (node) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), node];
     }
     const filter = FILTER_MAP[entry.action];
     if (!filter) continue;
@@ -275,6 +279,62 @@ function buildLoopNode(entry, index, actions, out, matt) {
 }
 
 /**
+ * Build a `showDialog` node for a MATT `dialog` action, synthesizing an extra named handler per distinct button target.
+ * @param {{action: string, data: object}} entry The MATT `dialog` action.
+ * @param {number} index `entry`'s index in `actions`.
+ * @param {{action: string, data: object}[]} actions The tile's whole flat MATT action list.
+ * @param {{report: object[], stubs: object[], destinations: object[], extraHandlers: Record<string, object>}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {object|null} A `showDialog` program node, or null.
+ */
+function buildDialogNode(entry, index, actions, out, matt) {
+  const data = entry.data ?? {};
+  if (data.file) return null;
+  const dialogType = data.dialogtype ?? 'confirm';
+  let buttonSpecs;
+  if (dialogType === 'confirm')
+    buttonSpecs = [
+      { label: 'Yes', goto: data.yes },
+      { label: 'No', goto: data.no }
+    ];
+  else if (dialogType === 'alert') buttonSpecs = [{ label: 'OK', goto: undefined }];
+  else if (dialogType === 'custom' && Array.isArray(data.buttons) && data.buttons.length) {
+    buttonSpecs = data.buttons.map((b) => ({ label: b.name ?? b.label ?? 'OK', goto: b.goto }));
+  } else return null;
+
+  const handlerByTag = new Map();
+  const handlerFor = (tag) => {
+    const key = tag || '';
+    if (handlerByTag.has(key)) return handlerByTag.get(key);
+    let bodyStart;
+    if (!tag) bodyStart = index + 1;
+    else {
+      const anchorIdx = actions.findIndex((a) => a.action === 'anchor' && a.data?.tag === tag);
+      if (anchorIdx === -1) return null;
+      bodyStart = anchorIdx + 1;
+    }
+    const name = `__mattDialog_${foundry.utils.randomID()}`;
+    out.extraHandlers[name] = { type: 'sequence', children: convertActions(actions.slice(bodyStart), out, matt) };
+    handlerByTag.set(key, name);
+    return name;
+  };
+
+  const buttons = [];
+  for (const spec of buttonSpecs) {
+    const handler = handlerFor(spec.goto);
+    if (!handler) return null;
+    buttons.push({ label: spec.label, handler });
+  }
+
+  out.report.push({
+    level: 'partial',
+    matt: entry,
+    note: 'Converted to a Show Dialog with each button wired to its own landing, resolved as a separate trigger handler - the Close button and its landing target have no glyph equivalent and were dropped.'
+  });
+  return { type: 'showDialog', title: data.title || '', content: data.content || '', buttons, audience: audienceFromShowto(data.showto) };
+}
+
+/**
  * Build a manual-review placeholder node, queuing its stub Macro creation.
  * @param {{action: string, data: object}} entry The original MATT action.
  * @param {{stubs: object[]}} out Accumulator this call appends to.
@@ -367,9 +427,9 @@ export function convertTile(tile) {
     mapping.events?.forEach((e) => events.add(e));
     mapping.pseudoEvents?.forEach((e) => pseudoEvents.add(e));
   }
-  const out = { report, stubs, destinations };
+  const out = { report, stubs, destinations, extraHandlers: {} };
   const sequence = { type: 'sequence', children: convertActions(matt.actions ?? [], out, matt) };
-  const handlers = {};
+  const handlers = { ...out.extraHandlers };
   for (const event of [...events, ...pseudoEvents]) handlers[event] = foundry.utils.deepClone(sequence);
   const fieldOverrides = {};
   for (const [mattKey, glyphKey] of Object.entries(FIELD_MAP)) if (matt[mattKey] !== undefined) fieldOverrides[glyphKey] = matt[mattKey];
