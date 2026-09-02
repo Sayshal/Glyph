@@ -1,6 +1,4 @@
-/** MATT action -> glyph program node conversion table. */
-
-import { pointFromLocation, referenceFromSentinel } from './matt-sentinels.mjs';
+import { idOf, pointFromLocation, referenceFromSentinel } from './matt-sentinels.mjs';
 
 /**
  * Resolve a MATT entity/location sentinel to a glyph reference, throwing if unresolved.
@@ -36,6 +34,38 @@ function requireUuid(entry) {
 }
 
 /**
+ * Resolve a MATT Teleport Token `entity` value: a single triggering-token reference, or a full group.
+ * @param {*} entity The raw MATT `entity` value.
+ * @returns {{single: true, ref: object}|{single: false, collection: string}} The resolved entity source.
+ */
+function resolveTeleportEntity(entity) {
+  const id = idOf(entity) ?? 'token';
+  if (id === 'within' || id === 'players') return { single: false, collection: id };
+  if (id.startsWith('tagger')) return { single: false, collection: `tag:${id.slice(7)}` };
+  return { single: true, ref: requireRef(entity ?? 'token') };
+}
+
+/**
+ * Resolve a MATT Teleport Token `location` value to a glyph reference, queuing a Region to be
+ * auto-created at commit time when the destination is a fixed map location (Tile/Scene/point).
+ * @param {*} location The raw MATT `location` value.
+ * @param {{destinations: object[]}} out Accumulator this call appends to.
+ * @returns {object} A glyph reference - a tag reference, or a pending-Region placeholder resolved at commit.
+ */
+function resolveTeleportDestination(location, out) {
+  const id = idOf(location);
+  if (id?.startsWith('tagger')) return { kind: 'tag', value: id.slice(7) };
+  const point = pointFromLocation(location);
+  const destId = foundry.utils.randomID();
+  if (point) {
+    out.destinations.push({ destId, point: { ...point, sceneId: location.sceneId ?? null } });
+    return { kind: '__pendingRegion', value: destId };
+  }
+  out.destinations.push({ destId, uuid: requireUuid(location) });
+  return { kind: '__pendingRegion', value: destId };
+}
+
+/**
  * Parse an absolute number, rejecting relative `+ n`/`- n` deltas.
  * @param {*} raw The raw MATT text value.
  * @returns {number} The absolute numeric value.
@@ -63,9 +93,7 @@ function coerceJsonValue(raw) {
 }
 
 export const ACTION_MAP = {
-  pause: {
-    convert: (data) => ({ type: 'pauseGame', mode: ['pause', 'unpause', 'toggle'].includes(data.pause) ? data.pause : 'pause' })
-  },
+  pause: { convert: (data) => ({ type: 'pauseGame', mode: ['pause', 'unpause', 'toggle'].includes(data.pause) ? data.pause : 'pause' }) },
   delay: {
     convert: (data) => {
       const text = String(data.delay ?? '').trim();
@@ -83,7 +111,22 @@ export const ACTION_MAP = {
   pancanvas: { convert: (data) => ({ type: 'panCanvas', location: requirePoint(data.location), audience: audienceFromFor(data.panfor) }) },
   ping: { convert: (data) => ({ type: 'pingLocation', location: requirePoint(data.location), style: data.style ?? 'pulse' }) },
   teleport: {
-    manual: "Teleport needs a destination Region, which MATT tiles don't have. Once the destination area is converted, add a Teleport Token action pointing at it by hand."
+    convert: (data, _matt, out) => {
+      const entity = resolveTeleportEntity(data.entity);
+      const destination = resolveTeleportDestination(data.location, out);
+      const teleportNode = {
+        type: 'teleportToken',
+        token: entity.single ? entity.ref : { kind: 'context', value: 'item' },
+        destination,
+        placement: ['random', 'center', 'relative'].includes(data.position) ? data.position : 'random',
+        snap: !!data.remotesnap,
+        avoidOccupied: !!data.avoidtokens,
+        pan: !!data.animatepan
+      };
+      return entity.single ? teleportNode : { type: 'forEach', collection: entity.collection, body: [teleportNode] };
+    },
+    partial:
+      "Glyph always deletes the origin token cleanly on a cross-scene teleport (no leave-behind option) and always lets the destination Region's own triggers fire naturally (no suppress option) - unlike MATT's deletesource/triggerremote, these aren't configurable."
   },
   movetoken: { convert: (data) => ({ type: 'moveToken', token: requireRef(data.entity), destination: requirePoint(data.location), snap: !!data.snap }) },
   rotation: { convert: (data) => ({ type: 'rotateToken', token: requireRef(data.entity), rotation: ((requireAbsoluteNumber(data.rotation) % 360) + 360) % 360 }) },
@@ -98,9 +141,7 @@ export const ACTION_MAP = {
   activate: {
     convert: (data) => {
       if (data.collection !== 'lights' && data.collection !== 'sounds') {
-        throw new Error(
-          "Turning another tile on/off can't convert automatically - that tile doesn't exist yet. Once both tiles are converted, add a Toggle Trigger action pointing at the other one by hand."
-        );
+        throw new Error("Turning another tile on/off can't convert automatically.Once both tiles are converted, add a Toggle Trigger action pointing at the other one by hand.");
       }
       const mode = { activate: 'enable', deactivate: 'disable', toggle: 'toggle' }[data.activate];
       if (!mode) throw new Error('"previous" mode has no glyph equivalent (glyph does not track prior hidden state)');
@@ -114,15 +155,24 @@ export const ACTION_MAP = {
   hurtheal: {
     convert: (data) => {
       const text = String(data.value ?? '').trim();
-      if (!text || text.includes('[[')) throw new Error('dice-roll value has no glyph equivalent');
-      const value = parseFloat(text);
-      if (!Number.isFinite(value)) throw new Error('non-numeric value');
-      return { type: 'hurtHeal', actor: requireRef(data.entity), value };
+      const formula = text.match(/^\[\[(?:\/\w+\s+)?(.+?)\]\]$/)?.[1]?.trim() ?? text;
+      if (!formula || !/^[-+0-9d\s.()*/]+$/i.test(formula)) throw new Error('value is not a valid dice formula');
+      return { type: 'hurtHeal', actor: requireRef(data.entity), value: formula };
     }
   },
   playsound: {
-    convert: (data) => ({ type: 'playSound', path: data.audiofile, loop: !!data.loop, volume: Number(data.volume ?? 1), channel: 'environment' }),
-    partial: 'Some sound options (scene restriction, overlap prevention, queuing) have no glyph equivalent and were dropped.'
+    convert: (data) => ({
+      type: 'playSound',
+      path: data.audiofile,
+      loop: !!data.loop,
+      volume: Number(data.volume ?? 1),
+      channel: 'environment',
+      restrictToScene: !!data.scenerestrict,
+      preventOverlap: !!data.prevent,
+      waitForCompletion: !!data.delay,
+      fadeIn: Number(data.fade ?? 0),
+      audience: audienceFromFor(data.audiofor)
+    })
   },
   playlist: {
     convert: (data) => {
@@ -229,7 +279,6 @@ export const ACTION_MAP = {
   resethistory: { convert: () => ({ type: 'resetTriggerHistory' }) },
   preloadtileimage: { manual: 'Just preloads images into memory for MATT - not needed once converted.' },
   tileimage: {
-    // index/randomRange field names are a best-effort guess - review if the picked image looks wrong.
     convert: (data, matt) => {
       const images = Array.isArray(matt?.files) ? matt.files.filter((f) => typeof f === 'string') : [];
       if (!images.length) throw new Error("this tile's own configured image list (flags.files) is empty or unreadable");
@@ -315,24 +364,15 @@ export const ACTION_MAP = {
   shuffle: { manual: 'Same MATT-only concept as Set Current Collection - no glyph equivalent.' },
   url: { convert: (data) => ({ type: 'openURL', url: /^https?:\/\//.test(data.url) ? data.url : `http://${data.url}` }) },
   runbatch: { manual: 'Internal MATT bookkeeping with nothing to convert - not needed in glyph.' },
-
-  distance: {
-    manual: 'Rebuild by hand as an If condition using distance().'
-  },
-  visibility: {
-    manual: "Checks whether one thing can see another. Glyph can do this (canSee()), but picking the right second target isn't safe to guess automatically - rebuild by hand as an If condition."
-  },
+  distance: { manual: 'Rebuild by hand as an If condition using distance().' },
+  visibility: { manual: "Checks whether one thing can see another. Glyph can do this, but picking the right second target isn't safe to guess automatically - rebuild by hand as an If condition." },
   attribute: { manual: 'Rebuild by hand as an If condition using attribute().' },
   inventory: { manual: 'Rebuild by hand as an If condition using hasItem().' },
   condition: { manual: 'Rebuild by hand as an If condition using hasCondition().' },
   random: { manual: 'Rebuild by hand as an If condition using chance().' },
   checkvariable: { manual: "Rebuild by hand as an If condition comparing the variable's value." },
   checkvalue: { manual: 'Relies on MATT-only internal data glyph does not have. No conversion possible.' },
-  first: {
-    manual:
-      "Picks one item from MATT's own working list, which glyph doesn't track (same reason as Set Current Collection). Glyph's For Each can pick one item this way - rebuild it by hand and choose the collection yourself."
-  },
-
+  first: { manual: "Glyph's For Each can pick one item this way - rebuild it by hand and choose the collection yourself." },
   anchor: { convert: (data) => ({ type: 'landing', tag: data.tag }) },
   goto: { convert: (data) => ({ type: 'goto', tag: data.tag, limit: data.limit ? Number(data.limit) || undefined : undefined }) },
   loop: { manual: 'Rebuild by hand as a For Each over the right collection.' },
@@ -342,7 +382,6 @@ export const ACTION_MAP = {
       return { type: 'stopActions' };
     }
   },
-  // "Stop Further Triggers" is always self-scoped in MATT (no entity field) - same as `stop`'s self-case.
   stoptriggers: { convert: () => ({ type: 'stopActions' }) },
   checkdata: {
     manual: "Compares data on the tile itself. Glyph can do this (tileData()), but the branch it gates isn't safe to rebuild automatically - rebuild by hand as an If condition."
@@ -370,7 +409,7 @@ export const ACTION_MAP = {
  */
 export const FILTER_MAP = {
   condition: {
-    expression: (data) => (data.effectid ? `hasCondition({{event.data.token}}, "${data.effectid}") == ${data.hascondition !== 'hasnot'}` : null),
+    expression: (data) => (data.effectid ? `hasCondition({{token}}, "${data.effectid}") == ${data.hascondition !== 'hasnot'}` : null),
     failLanding: () => null
   },
   random: {
@@ -392,11 +431,11 @@ export const FILTER_MAP = {
     failLanding: (data) => data.fail || null
   },
   attribute: {
-    expression: (data) => (data.attribute ? `attribute({{event.data.token}}, "${data.attribute}") == ${JSON.stringify(coerceJsonValue(data.value))}` : null),
+    expression: (data) => (data.attribute ? `attribute({{token}}, "${data.attribute}") == ${JSON.stringify(coerceJsonValue(data.value))}` : null),
     failLanding: () => null
   },
   inventory: {
-    expression: (data) => (data.item ? `hasItem({{event.data.token}}, "${data.item}")` : null),
+    expression: (data) => (data.item ? `hasItem({{token}}, "${data.item}")` : null),
     failLanding: () => null
   },
   exists: {
@@ -412,7 +451,7 @@ export const FILTER_MAP = {
     failLanding: () => null
   },
   tokencount: {
-    expression: (data) => `tokenCount({{event.data.token}}) ${{ equals: '==', notequal: '!=', greaterthan: '>', lessthan: '<' }[data.operator] ?? '>='} ${Number(data.count) || 0}`,
+    expression: (data) => `tokenCount({{token}}) ${{ equals: '==', notequal: '!=', greaterthan: '>', lessthan: '<' }[data.operator] ?? '>='} ${Number(data.count) || 0}`,
     failLanding: () => null
   },
   distance: {
@@ -422,7 +461,7 @@ export const FILTER_MAP = {
       if (!target) return null;
       const mode = data.from === 'edge' ? ', "edge"' : '';
       const op = { equals: '==', notequal: '!=', greaterthan: '>', lessthan: '<', lessthanequal: '<=', greaterthanequal: '>=' }[data.operator] ?? '<=';
-      if (data.continue !== 'any' && data.continue !== 'all') return `distance({{event.data.token}}, ${target}${mode}) ${op} ${Number(data.distance) || 0}`;
+      if (data.continue !== 'any' && data.continue !== 'all') return `distance({{token}}, ${target}${mode}) ${op} ${Number(data.distance) || 0}`;
       const entityCollection = { players: 'players', users: 'users', 'users:active': 'users:active', tokens: 'within' }[idOfSentinel(data.entity)] ?? 'within';
       return `${data.continue}("${entityCollection}", distance({{item}}, ${target}${mode}) ${op} ${Number(data.distance) || 0})`;
     },
@@ -431,7 +470,7 @@ export const FILTER_MAP = {
 };
 
 /**
- * Pull the sentinel id out of a MATT entity value, same as `matt-sentinels.mjs`'s private helper.
+ * Pull the sentinel id out of a MATT entity value.
  * @param {*} entry The raw MATT `entity` value.
  * @returns {string|undefined}
  */
@@ -465,8 +504,7 @@ function requireRefOrNull(entry) {
 }
 
 /**
- * MATT's 13 named transitions (`blur` has no glyph equivalent) collapsed to glyph's set
- * (`scripts/actions/tile.mjs`).
+ * MATT's named transitions
  * @param {string} matt The raw MATT transition name.
  * @returns {string} A glyph `changeTileImage` transition choice.
  */
@@ -479,7 +517,7 @@ function transitionFromMatt(matt) {
 }
 
 /**
- * MATT's `showfor`/`showto` sentinel -> glyph's `AUDIENCE_FIELD` choices (`scripts/actions/messaging.mjs`).
+ * MATT's `showfor`/`showto` sentinel -> glyph's `AUDIENCE_FIELD` choices.
  * @param {string} showto The MATT audience sentinel.
  * @returns {string} A glyph audience choice.
  */

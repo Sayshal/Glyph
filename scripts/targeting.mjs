@@ -28,13 +28,22 @@ export function listResolvers() {
  */
 export function resolveCollection(id, context) {
   if (context.collections.has(id)) return context.collections.get(id);
-  const result = resolvers.get(id)?.resolve(context) ?? [];
+  const result = id.startsWith('tag:') ? resolveTaggedCollection(id.slice(4)) : (resolvers.get(id)?.resolve(context) ?? []);
   context.collections.set(id, result);
   return result;
 }
 
 /**
- * Resolve a glyph reference (`{kind, value, scope}`, see scripts/data/reference-field.mjs).
+ * Every placeable carrying a given Tagger tag.
+ * @param {string} tag The tag to look up.
+ * @returns {object[]} Matching placeables' documents.
+ */
+function resolveTaggedCollection(tag) {
+  return isModuleActive('tagger') ? Tagger.getByTag(tag) : [];
+}
+
+/**
+ * Resolve a glyph reference (`{kind, value, scope}`).
  * @param {{kind: string, value: string, scope?: string}} ref The reference to resolve.
  * @param {import('./run-context.mjs').RunContext} context The active run context.
  * @returns {*} The resolved value, or null if it can't be resolved.
@@ -63,7 +72,7 @@ export function toActor(resolved) {
 }
 
 /**
- * Resolve a reference that must produce an Actor, unwrapping a resolved Token - see {@link toActor}.
+ * Resolve a reference that must produce an Actor, unwrapping a resolved Token.
  * @param {{kind: string, value: string, scope?: string}} ref The reference to resolve.
  * @param {import('./run-context.mjs').RunContext} context The active run context.
  * @returns {Actor|null} The resolved actor, or null.

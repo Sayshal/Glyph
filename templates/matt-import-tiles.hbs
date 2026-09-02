@@ -1,0 +1,27 @@
+<div class="glyph-import-tiles">
+  {{#each rows as |row|}}
+    {{#if row.issues.length}}
+      <details class="glyph-import-tile" open>
+        <summary>
+          <span class="glyph-import-tile-badge glyph-import-{{#if row.counts.manual}}manual{{else}}partial{{/if}}">{{row.badge}}</span>
+          <span class="glyph-import-tile-name">{{row.name}}</span>
+          {{#unless row.linked}}<span class="hint">{{localize "GLYPH.IMPORT.markerOnly"}}</span>{{/unless}}
+        </summary>
+        <ul class="glyph-import-issues">
+          {{#each row.issues as |issue|}}
+            <li class="glyph-import-issue glyph-import-{{issue.level}}">
+              <span class="glyph-import-issue-note">{{issue.note}}</span>
+              <pre class="glyph-import-issue-matt">{{issue.matt}}</pre>
+            </li>
+          {{/each}}
+        </ul>
+      </details>
+    {{else}}
+      <div class="glyph-import-clean-row">
+        <i class="fa-solid fa-check"></i>
+        <span class="glyph-import-tile-name">{{row.name}}</span>
+        {{#unless row.linked}}<span class="hint">{{localize "GLYPH.IMPORT.markerOnly"}}</span>{{/unless}}
+      </div>
+    {{/if}}
+  {{/each}}
+</div>

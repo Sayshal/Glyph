@@ -1,7 +1,8 @@
 import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
+import { registerHurtHealAdapter } from '../hurt-heal-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
-import { resolveActorReference, resolveReference } from '../targeting.mjs';
+import { resolveReference } from '../targeting.mjs';
 
 /** dnd5e-only */
 export function registerDnd5eActions() {
@@ -56,21 +57,18 @@ export function registerDnd5eActions() {
   });
 
   /** `Actor5e#applyDamage(damages)` */
-  registerNodeType('hurtHeal', {
-    category: 'token',
-    label: 'GLYPH.ACTIONS.hurtHeal.label',
-    hint: 'GLYPH.ACTIONS.hurtHeal.hint',
-    fields: [
-      { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.hurtHeal.FIELDS.actor.label', required: true },
-      { name: 'value', widget: 'number', label: 'GLYPH.ACTIONS.hurtHeal.FIELDS.value.label', hint: 'GLYPH.ACTIONS.hurtHeal.FIELDS.value.hint', required: true }
-    ],
-    validate(node) {
-      if (typeof node.actor !== 'object') throw new Error('hurtHeal.actor must be a reference object.');
-      if (typeof node.value !== 'number') throw new Error('hurtHeal.value must be a number.');
+  registerHurtHealAdapter(
+    'dnd5e',
+    async (actor, formula, damageType, postCard) => {
+      const roll = damageType ? new CONFIG.Dice.DamageRoll(formula, actor.getRollData(), { type: damageType }) : new Roll(formula);
+      await roll.evaluate();
+      if (postCard) {
+        const typeLabel = CONFIG.DND5E.damageTypes[damageType]?.label ?? CONFIG.DND5E.healingTypes[damageType]?.label;
+        await roll.toMessage({ flavor: typeLabel ? _loc(typeLabel) : undefined, speaker: ChatMessage.getSpeaker({ actor }) });
+      }
+      const damages = damageType ? [{ value: roll.total, type: damageType }] : roll.total;
+      await actor.applyDamage(damages);
     },
-    async execute(node, context) {
-      const actor = resolveActorReference(node.actor, context);
-      if (actor) await actor.applyDamage(node.value);
-    }
-  });
+    Object.fromEntries(Object.entries({ ...CONFIG.DND5E.damageTypes, ...CONFIG.DND5E.healingTypes }).map(([key, { label }]) => [key, label]))
+  );
 }

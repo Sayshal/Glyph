@@ -32,7 +32,7 @@ function hasMattTemplate(data) {
 /**
  * Convert one MATT action-list entry into a glyph program node, or a manual-review stub.
  * @param {{action: string, data: object}} entry One entry of MATT's flat `actions[]`.
- * @param {{report: object[], stubs: object[]}} out Accumulators this call appends to.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
  * @param {object} matt The tile's whole `flags.monks-active-tiles` object, for converters needing tile-level data.
  * @returns {object} A glyph program node (real, or a `__mattManualStub` placeholder).
  */
@@ -48,7 +48,7 @@ function convertAction(entry, out, matt) {
     return stub(entry, out);
   }
   try {
-    const node = mapping.convert(entry.data ?? {}, matt);
+    const node = mapping.convert(entry.data ?? {}, matt, out);
     validateNode(node);
     const template = hasMattTemplate(entry.data);
     const partial = mapping.partial ?? (template ? "Text contains MATT's own {{value...}} template placeholders, which don't resolve against glyph's context - rewrite them by hand." : null);
@@ -61,8 +61,7 @@ function convertAction(entry, out, matt) {
 }
 
 /**
- * Convert a flat MATT action list into glyph program nodes, wrapping the remainder of the chain in
- * an `if` node wherever a `FILTER_MAP`-eligible filter gates it.
+ * Convert a flat MATT action list into glyph program nodes.
  * @param {{action: string, data: object}[]} actions MATT's flat `actions[]`, or a suffix of it.
  * @param {{report: object[], stubs: object[]}} out Accumulators this call appends to.
  * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
@@ -115,16 +114,58 @@ export function resolveStubs(node, macroUuidByStubId) {
 }
 
 /**
+ * Replace every pending-Region teleport destination in a program tree with the real Region reference created for it.
+ * @param {object} node A program node (recurses through `children`/`then`/`else`/`body`).
+ * @param {Record<string, object>} regionRefByDestId Destination id -> resolved `{kind: 'uuid', value}` reference.
+ * @returns {object} The same node, with pending destinations resolved in place.
+ */
+export function resolveDestinations(node, regionRefByDestId) {
+  if (!node || typeof node !== 'object') return node;
+  if (node.type === 'teleportToken' && node.destination?.kind === '__pendingRegion') node.destination = regionRefByDestId[node.destination.value] ?? null;
+  for (const key of ['children', 'then', 'else', 'body']) if (Array.isArray(node[key])) node[key] = node[key].map((child) => resolveDestinations(child, regionRefByDestId));
+  return node;
+}
+
+/**
+ * Create the auto-generated destination Region for one queued teleport target.
+ * @param {{uuid?: string, point?: {x: number, y: number, sceneId: string|null}}} destination A queued destination descriptor.
+ * @param {Scene} fallbackScene The scene a sceneless raw-point destination falls back to.
+ * @returns {Promise<{scene: Scene, ref: {kind: 'uuid', value: string}}|null>} The created Region's scene and reference, or null if unresolvable.
+ */
+async function createTeleportDestinationRegion(destination, fallbackScene) {
+  let targetScene, shape;
+  if (destination.uuid) {
+    const target = await fromUuid(destination.uuid);
+    if (target instanceof TileDocument) {
+      targetScene = target.parent;
+      shape = regionShapeFromTile(target);
+    } else if (target instanceof Scene) {
+      targetScene = target;
+      shape = { type: 'rectangle', x: 0, y: 0, width: target.dimensions.width, height: target.dimensions.height };
+    }
+  } else if (destination.point) {
+    targetScene = destination.point.sceneId ? game.scenes.get(destination.point.sceneId) : fallbackScene;
+    const size = targetScene?.dimensions.size ?? 100;
+    shape = { type: 'rectangle', x: destination.point.x - size / 2, y: destination.point.y - size / 2, width: size, height: size };
+  }
+  if (!targetScene || !shape) return null;
+  const [region] = await targetScene.createEmbeddedDocuments('Region', [{ name: 'Teleport Destination', shapes: [shape] }]);
+  return { scene: targetScene, ref: { kind: 'uuid', value: region.uuid } };
+}
+
+/**
  * Convert one MATT-flagged Tile into glyph shape, dry-run.
  * @param {TileDocument} tile A Tile carrying `flags.monks-active-tiles`.
- * @returns {{regionShape: object, linkedTile: object|null, disabled: boolean, system: object, report: object[], stubs: object[]}} The converted result.
+ * @returns {{regionShape: object, linkedTile: object|null, disabled: boolean, system: object, report: object[], stubs: object[], destinations: object[]}} The converted result.
  */
 export function convertTile(tile) {
   const matt = tile.flags?.['monks-active-tiles'];
   const report = [];
   const stubs = [];
-  if (!matt) return { regionShape: regionShapeFromTile(tile), linkedTile: null, disabled: true, system: buildTriggerSystem({ handlers: {} }), report, stubs };
-
+  const destinations = [];
+  if (!matt) {
+    return { regionShape: regionShapeFromTile(tile), linkedTile: null, disabled: true, system: buildTriggerSystem({ handlers: {} }), report, stubs, destinations };
+  }
   const events = new Set();
   const pseudoEvents = new Set();
   for (const mode of String(matt.trigger ?? '')
@@ -140,24 +181,22 @@ export function convertTile(tile) {
     mapping.events?.forEach((e) => events.add(e));
     mapping.pseudoEvents?.forEach((e) => pseudoEvents.add(e));
   }
-
-  const out = { report, stubs };
+  const out = { report, stubs, destinations };
   const sequence = { type: 'sequence', children: convertActions(matt.actions ?? [], out, matt) };
   const handlers = {};
   for (const event of [...events, ...pseudoEvents]) handlers[event] = foundry.utils.deepClone(sequence);
-
   const fieldOverrides = {};
   for (const [mattKey, glyphKey] of Object.entries(FIELD_MAP)) if (matt[mattKey] !== undefined) fieldOverrides[glyphKey] = matt[mattKey];
-  for (const [mattKey, note] of Object.entries(DROPPED_FIELDS))
+  for (const [mattKey, note] of Object.entries(DROPPED_FIELDS)) {
     if (matt[mattKey] && matt[mattKey] !== DROPPED_DEFAULTS[mattKey]) report.push({ level: 'skipped', matt: { [mattKey]: matt[mattKey] }, note });
-
+  }
   const visible = tile.alpha > 0 && !!tile.texture?.src;
   const linkedTile = visible ? { kind: 'uuid', value: tile.uuid } : null;
-  if (!visible)
+  if (!visible) {
     report.push({ level: 'ok', matt: { tile: tile.name || tile.id }, note: 'Tile has no visible texture (alpha 0) - treated as an invisible marker; the Tile itself was not kept linked.' });
-
+  }
   const system = { ...buildTriggerSystem({ events: [...events], pseudoEvents: [...pseudoEvents], handlers }), ...fieldOverrides, linkedTile };
-  return { regionShape: regionShapeFromTile(tile), linkedTile, disabled: matt.active === false, system, report, stubs };
+  return { regionShape: regionShapeFromTile(tile), linkedTile, disabled: matt.active === false, system, report, stubs, destinations };
 }
 
 /**
@@ -188,10 +227,19 @@ export async function commitConversions(scene, entries) {
     : [];
   const macroUuidByStubId = Object.fromEntries(allStubs.map(({ stubId }, i) => [stubId, macros[i].uuid]));
 
+  const regionRefByDestId = {};
+  for (const destination of entries.flatMap((e) => e.converted.destinations)) {
+    const created = await createTeleportDestinationRegion(destination, scene);
+    if (created) regionRefByDestId[destination.destId] = created.ref;
+  }
+
   const regions = [];
   for (const { tile, converted } of entries) {
     const system = foundry.utils.deepClone(converted.system);
-    for (const event of Object.keys(system.handlers)) system.handlers[event] = resolveStubs(system.handlers[event], macroUuidByStubId);
+    for (const event of Object.keys(system.handlers)) {
+      system.handlers[event] = resolveStubs(system.handlers[event], macroUuidByStubId);
+      system.handlers[event] = resolveDestinations(system.handlers[event], regionRefByDestId);
+    }
     const [region] = await scene.createEmbeddedDocuments('Region', [
       { name: tile.name || 'MATT Import', shapes: [converted.regionShape], behaviors: [{ type: MODULE.BEHAVIOR_TYPE, system, disabled: converted.disabled }] }
     ]);

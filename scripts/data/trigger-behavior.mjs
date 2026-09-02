@@ -3,11 +3,30 @@ import { checkGates, recordFailure } from '../gates.mjs';
 import { runNode } from '../nodes/executor.mjs';
 import { ProgramField } from '../nodes/program-field.mjs';
 import '../nodes/types.mjs';
-import { registerRenderIntent, sendRenderIntent } from '../render-intent.mjs';
+import { registerRenderIntent, sendRenderIntent } from '../queries.mjs';
 import { createRunContext } from '../run-context.mjs';
-import { normalizeRunSource } from '../run-source.mjs';
 
 registerRenderIntent('triggerFailed', ({ region, error }) => ui.notifications.error('GLYPH.NOTIFICATIONS.TriggerFailed', { format: { region, error } }));
+
+/**
+ * Glyph's canonical run source.
+ * @typedef {object} RunSource
+ * @property {RegionDocument} region The Region the trigger fired on.
+ * @property {Scene} scene The Scene containing that Region.
+ * @property {object} event The triggering event.
+ * @property {string} event.name The `CONST.REGION_EVENTS` name.
+ * @property {object} event.data Event-specific payload.
+ * @property {User} event.user The User that triggered the event.
+ */
+
+/**
+ * Normalize a core RegionEvent into a RunSource.
+ * @param {object} regionEvent A core RegionEvent.
+ * @returns {RunSource} The normalized run source.
+ */
+function normalizeRunSource({ name, data, region, user }) {
+  return { region, scene: region.parent, event: { name, data, user } };
+}
 
 /** @type {Map<string, Promise>} Per-behavior promise chain tail, so overlapping triggers on the same behavior queue and run in order (rather than one silently dropping) - keeps a `wait` node from overlapping a second trigger too. */
 const runQueues = new Map();
@@ -109,7 +128,7 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
 
   /**
    * Gate and execute one already-queued trigger.
-   * @param {import('../run-source.mjs').RunSource} source The normalized run source.
+   * @param {RunSource} source The normalized run source.
    * @param {object} handler The handler tree to run.
    * @returns {Promise<void>}
    */

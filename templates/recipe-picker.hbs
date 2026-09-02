@@ -1,19 +1,22 @@
-<div class="glyph-recipe-groups">
-  {{#each groups as |group|}}
-    <section class="glyph-recipe-group">
-      <h3>{{group.category}}</h3>
-      <div class="glyph-recipe-rows">
-        {{#each group.recipes as |recipe|}}
-          <div class="glyph-recipe-row">
-            <div class="glyph-recipe-info">
-              <span class="glyph-recipe-name">{{recipe.name}}</span>
-              <p class="hint">{{recipe.hint}}</p>
-            </div>
-            <button type="button" data-action="apply"
-              data-recipe-id="{{recipe.id}}">{{localize "GLYPH.RECIPES.apply"}}</button>
-          </div>
-        {{/each}}
+<div class="glyph-recipe-picker-body">
+  <div class="glyph-recipe-search">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <input type="search" class="glyph-recipe-search-input" placeholder="{{localize 'GLYPH.RECIPES.search'}}" autocomplete="off">
+  </div>
+  <div class="glyph-recipe-grid">
+    {{#each recipes as |recipe|}}
+      <div class="glyph-recipe-card" data-search="{{recipe.search}}">
+        <div class="glyph-recipe-card-top">
+          <span class="glyph-recipe-badge glyph-recipe-badge-{{recipe.category}}"><i class="{{recipe.icon}}"></i></span>
+          <span class="glyph-recipe-name">{{recipe.name}}</span>
+        </div>
+        <p class="hint">{{recipe.hint}}</p>
+        <div class="glyph-recipe-card-foot">
+          <span class="glyph-recipe-cat">{{recipe.categoryLabel}}</span>
+          <button type="button" data-action="apply" data-recipe-id="{{recipe.id}}">{{localize "GLYPH.RECIPES.apply"}}</button>
+        </div>
       </div>
-    </section>
-  {{/each}}
+    {{/each}}
+  </div>
+  <p class="glyph-recipe-empty hint" hidden>{{localize "GLYPH.RECIPES.noResults"}}</p>
 </div>

@@ -1,7 +1,7 @@
 import { sendToAudience } from '../audience.mjs';
 import { runTrigger } from '../manual-trigger.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { registerRenderIntent } from '../render-intent.mjs';
+import { registerRenderIntent } from '../queries.mjs';
 import { interpolate } from '../run-context.mjs';
 import { resolveReference } from '../targeting.mjs';
 

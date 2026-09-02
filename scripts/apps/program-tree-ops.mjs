@@ -51,12 +51,7 @@ export function moveAtPath(root, path, offset) {
 }
 
 /** @type {Record<string, *>} Default value per field widget kind, when scaffolding a new node. */
-const WIDGET_DEFAULTS = {
-  boolean: false,
-  number: 0,
-  multiSelect: [],
-  reference: { kind: 'uuid', value: '' }
-};
+const WIDGET_DEFAULTS = { boolean: false, number: 0, multiSelect: [], reference: { kind: 'uuid', value: '' } };
 
 /**
  * Build a minimal valid node of `type`, with every slot initialized empty and every field defaulted.

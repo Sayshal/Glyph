@@ -1,7 +1,7 @@
 import { sendToAudience } from '../audience.mjs';
 import { MODULE } from '../constants.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { registerRenderIntent } from '../render-intent.mjs';
+import { registerRenderIntent } from '../queries.mjs';
 import { resolveReference } from '../targeting.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
 

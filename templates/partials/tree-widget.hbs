@@ -1,0 +1,71 @@
+<div class="glyph-widget">
+  {{#if (eq kind "textarea")}}
+    <textarea data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" rows="3">{{value}}</textarea>
+  {{else if (eq kind "number")}}
+    <input type="number" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" {{#if numeric}}
+      data-numeric="true" {{/if}} value="{{value}}" {{#if hasMin}} min="{{min}}" {{/if}}{{#if hasMax}} max="{{max}}"
+      {{/if}}{{#if hasStep}} step="{{step}}" {{/if}}>
+  {{else if (eq kind "formula")}}
+    <input type="text" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" value="{{value}}"
+      placeholder="2d6+3">
+  {{else if (eq kind "boolean")}}
+    <input type="checkbox" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}"
+      {{checked value}}>
+  {{else if (eq kind "select")}}
+    <select data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" {{#if numeric}}
+      data-numeric="true" {{/if}}{{#if multiple}} multiple{{/if}}>{{selectOptions choices selected=selected}}</select>
+  {{else if (eq kind "json")}}
+    <input type="text" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" value="{{value}}">
+  {{else if (eq kind "uuid")}}
+    <document-tags data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" type="{{documentType}}"
+      single value="{{value}}"></document-tags>
+  {{else if (eq kind "file")}}
+    <file-picker data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" type="{{filePickerType}}"
+      value="{{value}}"></file-picker>
+  {{else if (eq kind "tagRef")}}
+    <div class="glyph-tag-ref">
+      <input type="text" list="{{listId}}" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}"
+        value="{{value}}">
+      <datalist id="{{listId}}">{{#each tags}}
+          <option value="{{this}}">
+        {{/each}}</datalist>
+    </div>
+  {{else if (eq kind "point")}}
+    <div class="glyph-point">
+      <label>{{localize "GLYPH.POINT.x"}} <input type="number" data-path="{{path}}.x" data-field="x"
+          value="{{x}}"></label>
+      <label>{{localize "GLYPH.POINT.y"}} <input type="number" data-path="{{path}}.y" data-field="y"
+          value="{{y}}"></label>
+      <label>{{localize "GLYPH.POINT.elevation"}} <input type="number" data-path="{{path}}.elevation"
+          data-field="elevation" value="{{elevation}}"></label>
+    </div>
+  {{else if (eq kind "reference")}}
+    <div class="glyph-reference" data-document-type="{{documentType}}">
+      <select data-path="{{path}}.kind" data-field="kind" class="glyph-ref-kind">
+        <option value="uuid" {{#if (eq refKind "uuid")}}selected{{/if}}>{{localize "GLYPH.REFERENCE_KIND.uuid"}}
+        </option>
+        <option value="triggerToken" {{#if (eq refKind "triggerToken")}}selected{{/if}}>
+          {{localize "GLYPH.REFERENCE_KIND.triggerToken"}}
+        </option>
+        <option value="triggerActor" {{#if (eq refKind "triggerActor")}}selected{{/if}}>
+          {{localize "GLYPH.REFERENCE_KIND.triggerActor"}}
+        </option>
+        <option value="context" {{#if (eq refKind "context")}}selected{{/if}}>
+          {{localize "GLYPH.REFERENCE_KIND.context"}}
+        </option>
+      </select>
+      {{#if (eq refKind "context")}}
+        {{> "modules/glyph/templates/partials/reference-value-context.hbs" path=refValuePath}}
+      {{else if (eq refKind "uuid")}}
+        {{> "modules/glyph/templates/partials/reference-value-uuid.hbs" path=refValuePath documentType=documentType}}
+      {{/if}}
+    </div>
+  {{else if (eq kind "expression")}}
+    <input type="text" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" value="{{value}}"
+      placeholder="\{{token.name}} == &quot;Goblin&quot;">
+  {{else if (eq kind "custom")}}
+    {{{html}}}
+  {{else}}
+    <input type="text" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" value="{{value}}">
+  {{/if}}
+</div>

@@ -1,7 +1,7 @@
 import { sendToAudience } from '../audience.mjs';
 import { isModuleActive } from '../capability.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { registerRenderIntent } from '../render-intent.mjs';
+import { registerRenderIntent } from '../queries.mjs';
 import { interpolate } from '../run-context.mjs';
 import { AUDIENCE_FIELD, INTERPOLATED_TEXT_HINT } from './messaging.mjs';
 

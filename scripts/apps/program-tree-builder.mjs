@@ -1,4 +1,5 @@
 import { getAbilityChoices } from '../ability-test-adapters.mjs';
+import { getDamageTypeChoices } from '../hurt-heal-adapters.mjs';
 import { getNodeType, listNodeTypes } from '../nodes/registry.mjs';
 import { getSkillChoices } from '../skill-test-adapters.mjs';
 import { listResolvers } from '../targeting.mjs';
@@ -20,192 +21,144 @@ function nodeTypeGroups() {
 }
 
 /**
- * Escape a value for safe interpolation into an HTML attribute or text node.
- * @param {*} value The value to escape.
- * @returns {string} The escaped string.
+ * Turn a plain `{value: locKey}` choices map into the array shape `{{selectOptions}}` expects.
+ * @param {Record<string, string>} choices A field's `choices` map.
+ * @returns {{value: string, label: string}[]} The normalized, localized choice list.
  */
-export function esc(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+function normalizeChoices(choices) {
+  return Object.entries(choices).map(([value, label]) => ({ value, label: _loc(label) }));
 }
 
 /**
- * Render one field widget as an HTML fragment.
+ * Build the plain-data view model for one field's widget.
  * @param {object} field A field descriptor from a node type's `fields` metadata.
  * @param {*} value The field's current value.
  * @param {string} path The dotted path to this field's owning node.
- * @param {{handlerNames: string[], landingTags: Set<string>}} ui Shared render-time context.
+ * @param {{handlerNames: string[], landingTags: Set<string>}} ui Shared build-time context.
  * @param {object} node The owning node instance, for widgets that read a sibling field.
- * @returns {string} The widget's HTML.
+ * @returns {object} The widget view model.
  */
-function renderWidget(field, value, path, ui, node) {
-  const attrs = `data-path="${path}" data-field="${field.name}" data-widget="${field.widget}"${field.numeric ? ' data-numeric="true"' : ''}`;
+function buildWidget(field, value, path, ui, node) {
+  const base = { path, fieldName: field.name, widgetName: field.widget, numeric: !!field.numeric };
   switch (field.widget) {
     case 'textarea':
-      return `<textarea ${attrs} rows="3">${esc(value)}</textarea>`;
+      return { ...base, kind: 'textarea', value: value ?? '' };
     case 'number':
-      return `<input type="number" ${attrs} value="${value ?? 0}"${field.min !== undefined ? ` min="${field.min}"` : ''}${field.max !== undefined ? ` max="${field.max}"` : ''}${field.step !== undefined ? ` step="${field.step}"` : ''}>`;
+      return {
+        ...base,
+        kind: 'number',
+        value: value ?? 0,
+        hasMin: field.min !== undefined,
+        min: field.min,
+        hasMax: field.max !== undefined,
+        max: field.max,
+        hasStep: field.step !== undefined,
+        step: field.step
+      };
+    case 'formula':
+      return { ...base, kind: 'formula', value: value ?? '' };
     case 'boolean':
-      return `<input type="checkbox" ${attrs} ${value ? 'checked' : ''}>`;
+      return { ...base, kind: 'boolean', value: !!value };
     case 'select':
-      return `<select ${attrs}>${Object.entries(field.choices)
-        .map(([v, l]) => `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${_loc(l)}</option>`)
-        .join('')}</select>`;
+      return { ...base, kind: 'select', choices: normalizeChoices(field.choices), selected: [String(value)] };
     case 'systemAbility':
     case 'systemSkill': {
       const choices = field.widget === 'systemAbility' ? getAbilityChoices() : getSkillChoices();
-      if (!choices) return `<input type="text" ${attrs} value="${esc(value)}">`;
-      return `<select ${attrs}>${Object.entries(choices)
-        .map(([v, l]) => `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${_loc(l)}</option>`)
-        .join('')}</select>`;
+      if (!choices) return { ...base, kind: 'text', value: value ?? '' };
+      return { ...base, kind: 'select', choices: normalizeChoices(choices), selected: [String(value)] };
     }
-    case 'multiSelect': {
-      const selected = new Set((value ?? []).map(String));
-      return `<select ${attrs} multiple>${Object.entries(field.choices)
-        .map(([v, l]) => `<option value="${v}" ${selected.has(v) ? 'selected' : ''}>${_loc(l)}</option>`)
-        .join('')}</select>`;
+    case 'systemDamageType': {
+      const choices = getDamageTypeChoices();
+      if (!choices) return { ...base, kind: 'text', value: value ?? '' };
+      return { ...base, kind: 'select', choices: [{ value: '', label: _loc('GLYPH.DAMAGE_TYPE.none') }, ...normalizeChoices(choices)], selected: [value || ''] };
     }
+    case 'multiSelect':
+      return { ...base, kind: 'select', multiple: true, choices: normalizeChoices(field.choices), selected: (value ?? []).map(String) };
     case 'json':
-      return `<input type="text" ${attrs} value="${esc(typeof value === 'string' ? value : JSON.stringify(value ?? ''))}">`;
+      return { ...base, kind: 'json', value: typeof value === 'string' ? value : JSON.stringify(value ?? '') };
     case 'uuid':
-      return `<document-tags ${attrs} type="${field.documentType ?? ''}" single value="${esc(value)}"></document-tags>`;
+      return { ...base, kind: 'uuid', value: value ?? '', documentType: field.documentType ?? '' };
     case 'journalAnchor': {
       const entry = node.uuid ? fromUuidSync(node.uuid) : null;
       const pages = entry instanceof JournalEntry ? entry.pages.filter((p) => p.type === 'text').sort((a, b) => a.sort - b.sort) : [];
-      const optgroups = pages
-        .map((page) => {
-          const headings = Object.values(page.toc).sort((a, b) => a.order - b.order);
-          const pageOption = `<option value="${esc(page.id)}" ${value === page.id ? 'selected' : ''}>${_loc('GLYPH.ACTIONS.openJournal.FIELDS.anchor.pageTop')}</option>`;
-          const headingOptions = headings
-            .map((h) => `<option value="${esc(`${page.id}#${h.slug}`)}" ${value === `${page.id}#${h.slug}` ? 'selected' : ''}>${'  '.repeat(h.level - 1)}${esc(h.text)}</option>`)
-            .join('');
-          return `<optgroup label="${esc(page.name)}">${pageOption}${headingOptions}</optgroup>`;
-        })
-        .join('');
-      return `<select ${attrs}>
-        <option value="" ${!value ? 'selected' : ''}>${_loc('GLYPH.ACTIONS.openJournal.FIELDS.anchor.none')}</option>
-        ${optgroups}
-      </select>`;
-    }
-    case 'file': {
-      const input = new foundry.data.fields.FilePathField({ categories: [(field.filePickerType ?? 'image').toUpperCase()] }).toInput({ value: value ?? '' });
-      input.removeAttribute('name');
-      input.dataset.path = path;
-      input.dataset.field = field.name;
-      return input.outerHTML;
-    }
-    case 'statusEffect':
-      return `<select ${attrs}>${CONFIG.statusEffects.map((s) => `<option value="${s.id}" ${value === s.id ? 'selected' : ''}>${_loc(s.name)}</option>`).join('')}</select>`;
-    case 'fxmasterEffect': {
-      const groups = new Map();
-      for (const [key, effect] of Object.entries(CONFIG.fxmaster?.particleEffects ?? {})) {
-        if (!groups.has(effect.group)) groups.set(effect.group, []);
-        groups.get(effect.group).push({ key, label: effect.label });
+      const choices = [{ value: '', label: _loc('GLYPH.ACTIONS.openJournal.FIELDS.anchor.none') }];
+      for (const page of pages) {
+        choices.push({ value: page.id, label: _loc('GLYPH.ACTIONS.openJournal.FIELDS.anchor.pageTop'), group: page.name });
+        for (const heading of Object.values(page.toc).sort((a, b) => a.order - b.order)) {
+          choices.push({ value: `${page.id}#${heading.slug}`, label: `${'  '.repeat(heading.level - 1)}${heading.text}`, group: page.name });
+        }
       }
-      const optgroups = [...groups.entries()]
-        .map(
-          ([group, effects]) =>
-            `<optgroup label="${esc(_loc(`FXMASTER.ParticleEffectsGroup${group.titleCase()}`))}">${effects
-              .map((e) => `<option value="${e.key}" ${value === e.key ? 'selected' : ''}>${esc(_loc(e.label))}</option>`)
-              .join('')}</optgroup>`
-        )
-        .join('');
-      return `<select ${attrs}>${optgroups}</select>`;
+      return { ...base, kind: 'select', choices, selected: [value || ''] };
+    }
+    case 'file':
+      return { ...base, kind: 'file', value: value ?? '', filePickerType: field.filePickerType ?? 'image' };
+    case 'statusEffect':
+      return { ...base, kind: 'select', choices: CONFIG.statusEffects.map((s) => ({ value: s.id, label: _loc(s.name) })), selected: [value] };
+    case 'fxmasterEffect': {
+      const choices = Object.entries(CONFIG.fxmaster?.particleEffects ?? {}).map(([key, effect]) => ({
+        value: key,
+        label: _loc(effect.label),
+        group: _loc(`FXMASTER.ParticleEffectsGroup${effect.group.titleCase()}`)
+      }));
+      return { ...base, kind: 'select', choices, selected: [value] };
     }
     case 'rollMode':
-      return `<select ${attrs}>${Object.entries(CONFIG.ChatMessage.modes)
-        .map(([k, m]) => `<option value="${k}" ${value === k ? 'selected' : ''}>${_loc(m.label)}</option>`)
-        .join('')}</select>`;
+      return { ...base, kind: 'select', choices: Object.entries(CONFIG.ChatMessage.modes).map(([k, m]) => ({ value: k, label: _loc(m.label) })), selected: [value] };
     case 'resolverSelect':
-      return `<select ${attrs}>${listResolvers()
-        .map((r) => `<option value="${r.id}" ${value === r.id ? 'selected' : ''}>${r.label}</option>`)
-        .join('')}</select>`;
-    case 'tagRef': {
-      const listId = `glyph-landings-${path.replace(/\./g, '-')}`;
-      return `<input type="text" list="${listId}" ${attrs} value="${esc(value)}"><datalist id="${listId}">${[...ui.landingTags].map((t) => `<option value="${esc(t)}">`).join('')}</datalist>`;
-    }
+      return { ...base, kind: 'select', choices: listResolvers().map((r) => ({ value: r.id, label: r.label })), selected: [value] };
+    case 'tagRef':
+      return { ...base, kind: 'tagRef', value: value ?? '', listId: `glyph-landings-${path.replace(/\./g, '-')}`, tags: [...ui.landingTags] };
     case 'handlerRef':
-      return `<select ${attrs}>${ui.handlerNames.map((n) => `<option value="${n}" ${value === n ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+      return { ...base, kind: 'select', choices: ui.handlerNames.map((n) => ({ value: n, label: n })), selected: [value] };
     case 'point': {
       const p = value && typeof value === 'object' ? value : {};
-      return `<div class="glyph-point">
-        <label>${_loc('GLYPH.POINT.x')} <input type="number" data-path="${path}.x" data-field="x" value="${p.x ?? 0}"></label>
-        <label>${_loc('GLYPH.POINT.y')} <input type="number" data-path="${path}.y" data-field="y" value="${p.y ?? 0}"></label>
-        <label>${_loc('GLYPH.POINT.elevation')} <input type="number" data-path="${path}.elevation" data-field="elevation" value="${p.elevation ?? 0}"></label>
-      </div>`;
+      return { ...base, kind: 'point', x: p.x ?? 0, y: p.y ?? 0, elevation: p.elevation ?? 0 };
     }
     case 'reference': {
       const ref = value && typeof value === 'object' ? value : { kind: 'uuid', value: '' };
-      const kindSelect = `<select data-path="${path}.kind" data-field="kind" class="glyph-ref-kind">
-        <option value="uuid" ${ref.kind === 'uuid' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.uuid')}</option>
-        <option value="triggerToken" ${ref.kind === 'triggerToken' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.triggerToken')}</option>
-        <option value="triggerActor" ${ref.kind === 'triggerActor' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.triggerActor')}</option>
-        <option value="context" ${ref.kind === 'context' ? 'selected' : ''}>${_loc('GLYPH.REFERENCE_KIND.context')}</option>
-      </select>`;
-      const valueInput =
-        ref.kind === 'context'
-          ? `<input type="text" data-path="${path}.value" data-field="value" value="${esc(ref.value)}" placeholder="variables.myVar">`
-          : ref.kind === 'uuid'
-            ? `<document-tags data-path="${path}.value" data-field="value" type="${field.documentType ?? ''}" single value="${esc(ref.value)}"></document-tags>`
-            : '';
-      return `<div class="glyph-reference" data-document-type="${field.documentType ?? ''}">${kindSelect}${valueInput}</div>`;
+      return { ...base, kind: 'reference', documentType: field.documentType ?? '', refKind: ref.kind, refValuePath: `${path}.value`, refValue: ref.value ?? '' };
     }
     case 'expression':
-      return `<input type="text" ${attrs} value="${esc(value)}" placeholder='{{event.data.token.name}} == "Goblin"'>`;
+      return { ...base, kind: 'expression', value: value ?? '' };
     case 'custom':
-      return field.render(value, path, ui);
+      return { ...base, kind: 'custom', html: field.render(value, path, ui) };
     case 'text':
     default:
-      return `<input type="text" ${attrs} value="${esc(value)}">`;
+      return { ...base, kind: 'text', value: value ?? '' };
   }
 }
 
 /**
- * Render one node's field descriptors as labeled form-groups.
+ * Build the view model for one node's field descriptors.
  * @param {object} definition The node type's registered definition.
  * @param {object} node The node instance.
  * @param {string} path The dotted path to this node.
- * @param {object} ui Shared render-time context, see {@link renderWidget}.
- * @returns {string} The fields' HTML.
+ * @param {object} ui Shared build-time context.
+ * @returns {object[]} The fields' view models.
  */
-function renderFields(definition, node, path, ui) {
-  return (definition.fields ?? [])
-    .map((field) => {
-      const value = node[field.name];
-      const hint = field.widget === 'reference' ? _loc(`GLYPH.REFERENCE_KIND_HINT.${value && typeof value === 'object' ? value.kind : 'uuid'}`) : field.hint ? _loc(field.hint) : null;
-      return `
-    <div class="form-group glyph-node-field">
-      <label>${_loc(field.label)}${field.required ? ' *' : ''}</label>
-      <div class="form-fields">${renderWidget(field, value, `${path ? `${path}.` : ''}${field.name}`, ui, node)}</div>
-      ${hint ? `<p class="hint">${hint}</p>` : ''}
-    </div>`;
-    })
-    .join('');
+function buildFields(definition, node, path, ui) {
+  return (definition.fields ?? []).map((field) => {
+    const value = node[field.name];
+    const hint = field.widget === 'reference' ? _loc(`GLYPH.REFERENCE_KIND_HINT.${value && typeof value === 'object' ? value.kind : 'uuid'}`) : field.hint ? _loc(field.hint) : null;
+    return { label: _loc(field.label), required: !!field.required, hint, widget: buildWidget(field, value, `${path ? `${path}.` : ''}${field.name}`, ui, node) };
+  });
 }
 
 /**
- * Render one slot (a named child-node array) as a list of child rows plus an add-node control.
+ * Build the view model for one slot (a named child-node array): its child rows plus an add-node control.
  * @param {object} slot A slot descriptor from a node type's `slots` metadata.
  * @param {object} node The owning node instance.
  * @param {string} path The dotted path to the owning node.
- * @param {object} ui Shared render-time context, see {@link renderWidget}.
+ * @param {object} ui Shared build-time context.
  * @param {Set<string>} expanded Node paths currently expanded.
- * @returns {string} The slot's HTML.
+ * @returns {object} The slot's view model.
  */
-function renderSlot(slot, node, path, ui, expanded) {
+function buildSlot(slot, node, path, ui, expanded) {
   const slotPath = `${path ? `${path}.` : ''}${slot.name}`;
   const children = node[slot.name];
-  if (slot.optional && !Array.isArray(children)) {
-    return `<div class="glyph-slot glyph-slot-empty" data-slot-path="${slotPath}">
-      <button type="button" class="glyph-add-slot" data-line-action="add-slot" data-slot-path="${slotPath}">
-        <i class="fa-solid fa-plus"></i> ${_loc(slot.label)}
-      </button>
-    </div>`;
-  }
-  const rows = (children ?? []).map((child, i) => renderNode(child, `${slotPath}.${i}`, ui, expanded)).join('');
-  const removeButton = slot.optional
-    ? `<button type="button" class="glyph-remove-slot" data-line-action="remove-slot" data-slot-path="${slotPath}" aria-label="${_loc('GLYPH.TREE.removeSlot')}" data-tooltip><i class="fa-solid fa-xmark"></i></button>`
-    : '';
-  const addNodeCombobox = renderCombobox({
+  const label = _loc(slot.label);
+  if (slot.optional && !Array.isArray(children)) return { slotPath, label, isEmpty: true };
+  const addNodeComboboxHtml = renderCombobox({
     id: `glyph-add-${slotPath.replace(/\./g, '-')}`,
     name: 'addNode',
     placeholder: _loc('GLYPH.TREE.addNode'),
@@ -214,71 +167,63 @@ function renderSlot(slot, node, path, ui, expanded) {
     groups: nodeTypeGroups(),
     data: { 'add-node-slot': slotPath }
   });
-  return `<div class="glyph-slot" data-slot-path="${slotPath}">
-    <div class="glyph-slot-header"><span>${_loc(slot.label)}</span>${removeButton}</div>
-    <div class="glyph-slot-rows">${rows}</div>
-    <div class="glyph-add-node-bar">${addNodeCombobox}</div>
-  </div>`;
+  return {
+    slotPath,
+    label,
+    isEmpty: false,
+    optional: !!slot.optional,
+    removeLabel: _loc('GLYPH.TREE.removeSlot'),
+    rows: (children ?? []).map((child, i) => buildNode(child, `${slotPath}.${i}`, ui, expanded)),
+    addNodeComboboxHtml
+  };
 }
 
 /**
- * Recursively render one program node and its descendants as an HTML fragment.
- * @param {object} node The node to render.
+ * Recursively build the view model for one program node and its descendants.
+ * @param {object} node The node to build.
  * @param {string} path The dotted path to this node (empty string for the handler root).
- * @param {object} ui Shared render-time context, see {@link renderWidget}.
+ * @param {object} ui Shared build-time context.
  * @param {Set<string>} expanded Node paths currently expanded.
- * @returns {string} The node's HTML.
+ * @returns {object} The node's view model.
  */
-export function renderNode(node, path, ui, expanded) {
+export function buildNode(node, path, ui, expanded) {
   const definition = getNodeType(node.type);
-  if (!definition) {
-    const deleteButton = path
-      ? `<button type="button" data-line-action="delete-node" data-path="${path}" aria-label="${_loc('GLYPH.TREE.delete')}" data-tooltip><i class="fa-solid fa-trash"></i></button>`
-      : '';
-    return `<div class="glyph-node-row glyph-node-error" data-node-path="${path}"><span>${_loc('GLYPH.TREE.unknownType', { type: node.type })}</span>${deleteButton}</div>`;
-  }
   const isRoot = path === '';
+  if (!definition) return { unknown: true, path, isRoot, typeLabel: _loc('GLYPH.TREE.unknownType', { type: node.type }), deleteLabel: _loc('GLYPH.TREE.delete') };
   const isEnabled = node.enabled !== false;
   const isOpen = isRoot || expanded.has(path);
-  const controls = isRoot
-    ? ''
-    : `<div class="glyph-node-controls">
-        <button type="button" data-line-action="toggle-enabled" data-path="${path}" aria-label="${_loc(isEnabled ? 'GLYPH.TREE.disable' : 'GLYPH.TREE.enable')}" data-tooltip><i class="fa-solid ${isEnabled ? 'fa-toggle-on' : 'fa-toggle-off'}"></i></button>
-        <button type="button" data-line-action="move-up" data-path="${path}" aria-label="${_loc('GLYPH.TREE.moveUp')}" data-tooltip><i class="fa-solid fa-arrow-up"></i></button>
-        <button type="button" data-line-action="move-down" data-path="${path}" aria-label="${_loc('GLYPH.TREE.moveDown')}" data-tooltip><i class="fa-solid fa-arrow-down"></i></button>
-        <button type="button" data-line-action="delete-node" data-path="${path}" aria-label="${_loc('GLYPH.TREE.delete')}" data-tooltip><i class="fa-solid fa-trash"></i></button>
-      </div>`;
-  const hasBody = (definition.fields?.length ?? 0) > 0 || (definition.slots?.length ?? 0) > 0;
-  const toggle =
-    hasBody && !isRoot
-      ? `<button type="button" class="glyph-node-toggle" data-line-action="toggle-node" data-path="${path}" aria-label="${_loc(isOpen ? 'GLYPH.TREE.collapse' : 'GLYPH.TREE.expand')}" data-tooltip><i class="fa-solid fa-caret-${isOpen ? 'down' : 'right'}"></i></button>`
-      : '<span class="glyph-node-toggle-spacer"></span>';
-  const body =
-    hasBody && isOpen
-      ? `<div class="glyph-node-body">${renderFields(definition, node, path, ui)}${(definition.slots ?? []).map((slot) => renderSlot(slot, node, path, ui, expanded)).join('')}</div>`
-      : '';
-  return `<div class="glyph-node-row${definition.structural ? ' glyph-node-structural' : ''}${isEnabled ? '' : ' glyph-node-disabled'}" data-node-path="${path}" data-node-type="${node.type}">
-    <div class="glyph-node-header">
-      ${toggle}
-      <i class="glyph-node-icon fa-solid ${definition.structural ? 'fa-diagram-project' : 'fa-bolt'}"></i>
-      <span class="glyph-node-label">${_loc(definition.label ?? node.type)}</span>
-      ${controls}
-    </div>
-    ${body}
-  </div>`;
+  const showBody = ((definition.fields?.length ?? 0) > 0 || (definition.slots?.length ?? 0) > 0) && isOpen;
+  return {
+    unknown: false,
+    path,
+    type: node.type,
+    isRoot,
+    isEnabled,
+    showToggle: (definition.fields?.length > 0 || definition.slots?.length > 0) && !isRoot,
+    toggleLabel: _loc(isOpen ? 'GLYPH.TREE.collapse' : 'GLYPH.TREE.expand'),
+    toggleIcon: isOpen ? 'fa-caret-down' : 'fa-caret-right',
+    structural: !!definition.structural,
+    icon: definition.structural ? 'fa-diagram-project' : 'fa-bolt',
+    label: _loc(definition.label ?? node.type),
+    enableLabel: _loc(isEnabled ? 'GLYPH.TREE.disable' : 'GLYPH.TREE.enable'),
+    enableIcon: isEnabled ? 'fa-toggle-on' : 'fa-toggle-off',
+    moveUpLabel: _loc('GLYPH.TREE.moveUp'),
+    moveDownLabel: _loc('GLYPH.TREE.moveDown'),
+    deleteLabel: _loc('GLYPH.TREE.delete'),
+    showBody,
+    fields: showBody ? buildFields(definition, node, path, ui) : [],
+    slots: showBody ? (definition.slots ?? []).map((slot) => buildSlot(slot, node, path, ui, expanded)) : []
+  };
 }
 
 /**
- * Render a full handler tree, ready to drop into the Program tab.
+ * Build the plain-data view model for a full handler tree.
  * @param {object} root The handler's root node.
  * @param {RegionBehavior} behavior The owning behavior, for handler-name/landing-tag context.
  * @param {Set<string>} expanded Node paths currently expanded.
- * @returns {string} The tree's HTML.
+ * @returns {object} The tree's view model.
  */
-export function renderTree(root, behavior, expanded) {
-  const ui = {
-    handlerNames: Object.keys(behavior.system.handlers ?? {}),
-    landingTags: collectLandingTags(root)
-  };
-  return renderNode(root, '', ui, expanded);
+export function buildTree(root, behavior, expanded) {
+  const ui = { handlerNames: Object.keys(behavior.system.handlers ?? {}), landingTags: collectLandingTags(root) };
+  return buildNode(root, '', ui, expanded);
 }

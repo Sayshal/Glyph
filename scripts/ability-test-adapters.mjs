@@ -1,5 +1,3 @@
-/** Per-system ability-test adapters, keyed by `game.system.id`. */
-
 /** @type {Map<string, (actor: Actor, type: string, ability: string, dc: number) => Promise<boolean|null>>} */
 const ADAPTERS = new Map();
 

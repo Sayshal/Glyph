@@ -9,16 +9,15 @@
             <option value="{{name}}" {{#if (eq name ../selectedHandler)}}selected{{/if}}>{{name}}</option>
           {{/each}}
         </select>
-        <button type="button" class="glyph-dry-run" data-line-action="dry-run">
-          <i class="fa-solid fa-vial"></i> {{localize "GLYPH.TREE.dryRun"}}
-        </button>
       </div>
       <p class="hint">{{localize "GLYPH.TREE.editingHandlerHint"}}</p>
     </div>
     {{#if hasPendingChanges}}
-      <p class="glyph-pending-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "GLYPH.TREE.pendingWarning"}}</p>
+      <p class="glyph-pending-warning"><i class="fa-solid fa-triangle-exclamation"></i>
+        {{localize "GLYPH.TREE.pendingWarning"}}
+      </p>
     {{/if}}
-    <div class="glyph-tree">{{{programHtml}}}</div>
+    <div class="glyph-tree">{{> "modules/glyph/templates/partials/tree-node.hbs" tree}}</div>
   {{else}}
     <p class="hint">{{localize "GLYPH.PLACEHOLDER.program"}}</p>
   {{/if}}

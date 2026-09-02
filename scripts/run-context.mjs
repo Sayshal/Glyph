@@ -7,14 +7,12 @@ import { MODULE } from './constants.mjs';
  * @property {Map<string, unknown[]>} collections Typed collections, keyed by document type.
  * @property {object} control Mutable control-flow signals.
  * @property {object} variables Lookup built from the persisted `{name, value}[]` array.
- * @property {boolean} [dryRun] Set by the authoring UI's Dry Run.
- * @property {{type: string, ms?: number, error?: string}[]} [trace] Every node `runNode` visits during a Dry Run, in order.
  * @property {*} previous Whatever the most recent producing action set it to, readable as `{{previous}}`.
  */
 
 /**
  * Build a fresh run context from a normalized run source.
- * @param {import('./run-source.mjs').RunSource} source The normalized run source.
+ * @param {import('./data/trigger-behavior.mjs').RunSource} source The normalized run source.
  * @param {RegionBehavior} behavior The triggering behavior document.
  * @returns {RunContext} The new run context.
  */
@@ -37,13 +35,13 @@ export function createRunContext(source, behavior) {
 }
 
 /**
- * Resolve a `{{path}}` expression path against a run context, with `info`'s contents exposed at the top level (e.g. `event.name`, not `info.event.name`).
+ * Resolve a `{{path}}` expression path against a run context, with `info`'s contents exposed at the top level (e.g. `event.name`, not `info.event.name`) and the triggering event's own payload exposed at the top level too (e.g. `token.name`, not `event.data.token.name`).
  * @param {RunContext} context The active run context.
  * @param {string} path A dotted path.
  * @returns {*} The resolved value.
  */
 export function resolvePath(context, path) {
-  return foundry.utils.getProperty({ ...context.info, ...context }, path);
+  return foundry.utils.getProperty({ ...context.info, ...context.info.event?.data, ...context }, path);
 }
 
 /**

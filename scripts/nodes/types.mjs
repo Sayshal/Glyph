@@ -164,7 +164,6 @@ registerNodeType('goto', {
   async execute(node, context) {
     const behavior = context.info.behavior;
     if (node.limit > 0 && behavior) {
-      // ponytail: counted per tag, not per goto node - two gotos sharing a tag share a counter.
       const key = `gotoCount.${node.tag}`;
       const count = (behavior.getFlag(MODULE.ID, key) ?? 0) + 1;
       if (count > node.limit) return;

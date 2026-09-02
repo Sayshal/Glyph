@@ -1,10 +1,7 @@
 import { MODULE } from '../constants.mjs';
-import { runNode } from '../nodes/executor.mjs';
-import { getNodeType } from '../nodes/registry.mjs';
-import { createRunContext } from '../run-context.mjs';
 import { applyTemplate, listTemplates, saveTemplate } from '../templates.mjs';
 import { Combobox } from './combobox.mjs';
-import { esc, renderTree } from './program-tree-builder.mjs';
+import { buildTree } from './program-tree-builder.mjs';
 import { deleteAtPath, getAtPath, moveAtPath, scaffoldNode } from './program-tree-ops.mjs';
 
 const { DocumentSheetV2 } = foundry.applications.api;
@@ -18,15 +15,10 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   /** @type {Set<string>} Node paths currently expanded in the Program tab tree. */
   #expanded = new Set();
 
-  /**
-   * @type {Map<string, object>} Per-handler tree edits that failed schema validation on save (e.g.
-   * a freshly-added node with an empty required field) - kept here instead of being silently
-   * dropped, so the invalid node stays visible and editable until it becomes valid. Cleared for a
-   * handler once its tree saves successfully, or a template is applied over it.
-   */
+  /** @type {Map<string, object>} Per-handler tree edits that failed schema validation on save. */
   #pendingTrees = new Map();
 
-  /** @type {Promise} Serializes {@link #mutateHandler} calls so overlapping edits don't race. */
+  /** @type {Promise} Serializes #mutateHandler calls so overlapping edits don't race. */
   #mutationQueue = Promise.resolve();
 
   constructor(options) {
@@ -40,7 +32,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     viewPermission: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER,
     position: { width: 640, height: 'auto' },
     window: { contentClasses: ['standard-form'], resizable: true },
-    form: { submitOnChange: true, closeOnSubmit: false }
+    form: { closeOnSubmit: true }
   };
 
   /** @inheritDoc */
@@ -72,13 +64,24 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     const context = await super._prepareContext(options);
     context.fields = this._getGeneralFields();
     context.hint = 'BEHAVIOR.TYPES.trigger.hint';
-    context.linkedTileHtml = this._renderLinkedTileWidget();
-    context.templateHtml = await this._renderTemplateWidget();
+    context.linkedTileValue = this.document.system.linkedTile?.value ?? '';
     context.buttons = [{ type: 'submit', icon: 'fa-solid fa-floppy-disk', label: 'BEHAVIOR.ACTIONS.update' }];
+    await this._prepareTemplateContext(context);
     this._prepareProgramContext(context);
     this._prepareVariablesContext(context);
     this._prepareHistoryContext(context);
     return context;
+  }
+
+  /**
+   * Populate the General tab's save/apply-template controls.
+   * @param {object} context The render context, mutated in place.
+   */
+  async _prepareTemplateContext(context) {
+    const templates = await listTemplates();
+    const groups = Object.groupBy(templates, (t) => t.category);
+    context.templateGroups = Object.entries(groups).map(([category, entries]) => ({ category, entries }));
+    context.hasTemplates = templates.length > 0;
   }
 
   /**
@@ -106,45 +109,6 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       .reverse();
   }
 
-  /**
-   * Render the linkedTile document picker as a raw HTML fragment for the General tab.
-   * @returns {string} The widget's HTML.
-   */
-  _renderLinkedTileWidget() {
-    const value = this.document.system.linkedTile?.value ?? '';
-    return `<div class="form-group">
-      <label>${_loc('BEHAVIOR.TYPES.trigger.FIELDS.linkedTile.label')}</label>
-      <div class="form-fields">
-        <document-tags class="glyph-linked-tile" type="Tile" single value="${value}"></document-tags>
-      </div>
-      <p class="hint">${_loc('BEHAVIOR.TYPES.trigger.FIELDS.linkedTile.hint')}</p>
-    </div>`;
-  }
-
-  /**
-   * Render the save/apply-template controls as a raw HTML fragment for the General tab.
-   * @returns {Promise<string>} The widget's HTML.
-   */
-  async _renderTemplateWidget() {
-    const templates = await listTemplates();
-    const groups = Object.groupBy(templates, (t) => t.category);
-    const options = Object.entries(groups)
-      .map(
-        ([category, entries]) =>
-          `<optgroup label="${esc(_loc(`GLYPH.TEMPLATES.CATEGORIES.${category}`))}">${entries.map((t) => `<option value="${esc(t.uuid)}">${esc(t.name)}</option>`).join('')}</optgroup>`
-      )
-      .join('');
-    return `<div class="form-group">
-      <label>${_loc('GLYPH.TEMPLATES.label')}</label>
-      <div class="form-fields">
-        <select class="glyph-template-select" ${templates.length ? '' : 'disabled'}>${options || `<option value="">${_loc('GLYPH.TEMPLATES.none')}</option>`}</select>
-        <button type="button" data-line-action="apply-template" ${templates.length ? '' : 'disabled'}>${_loc('GLYPH.TEMPLATES.apply')}</button>
-        <button type="button" data-line-action="save-template">${_loc('GLYPH.TEMPLATES.save')}</button>
-      </div>
-      <p class="hint">${_loc('GLYPH.TEMPLATES.hint')}</p>
-    </div>`;
-  }
-
   /** @inheritDoc */
   async _preparePartContext(partId, context, options) {
     context = await super._preparePartContext(partId, context, options);
@@ -164,7 +128,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     context.selectedHandler = this.#selectedHandler;
     context.hasPendingChanges = this.#pendingTrees.has(this.#selectedHandler);
     const tree = this.#pendingTrees.get(this.#selectedHandler) ?? system.handlers[this.#selectedHandler] ?? { type: 'sequence', children: [] };
-    context.programHtml = this.#selectedHandler ? renderTree(tree, this.document, this.#expanded) : '';
+    context.tree = this.#selectedHandler ? buildTree(tree, this.document, this.#expanded) : null;
   }
 
   /** @inheritDoc */
@@ -241,7 +205,6 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
         node.enabled = node.enabled === false;
       });
     }
-    if (lineAction === 'dry-run') return this.#runDryRun();
     if (lineAction === 'delete-history') {
       const history = this.document.getFlag(MODULE.ID, 'history') ?? [];
       history.splice(Number(index), 1);
@@ -287,53 +250,11 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
 
   /** Prompt for a name and save this behavior's configuration as a reusable template. */
   async #saveTemplate() {
-    const result = await foundry.applications.api.DialogV2.input({
-      window: { title: _loc('GLYPH.TEMPLATES.save') },
-      content: `<div class="form-group">
-        <label>${_loc('GLYPH.TEMPLATES.nameLabel')}</label>
-        <div class="form-fields"><input type="text" name="name" required></div>
-      </div>`
-    });
+    const content = await foundry.applications.handlebars.renderTemplate(`modules/${MODULE.ID}/templates/partials/save-template-dialog.hbs`, {});
+    const result = await foundry.applications.api.DialogV2.input({ window: { title: _loc('GLYPH.TEMPLATES.save') }, content });
     if (!result?.name) return;
     await saveTemplate(this.document, result.name);
     this.render({ parts: ['general'] });
-  }
-
-  /** Run the selected handler's tree with every real action skipped, to preview its shape without touching game state. */
-  async #runDryRun() {
-    const handler = this.#selectedHandler;
-    if (!handler) return;
-    const behavior = this.document;
-    const root = behavior.system.handlers[handler] ?? { type: 'sequence', children: [] };
-    const source = { region: behavior.parent, scene: behavior.parent?.parent ?? null, event: { name: handler, data: {}, user: game.user } };
-    const context = createRunContext(source, behavior);
-    context.dryRun = true;
-    context.trace = [];
-    let error = null;
-    try {
-      await runNode(root, context);
-    } catch (err) {
-      error = err;
-    }
-    this.#showDryRunResults(context.trace, error);
-  }
-
-  /**
-   * Show a dry run's trace: every node visited, in order, with its outcome.
-   * @param {{type: string, ms?: number, error?: string}[]} trace Trace entries from the dry run.
-   * @param {Error|null} error The error that halted the run, if any.
-   */
-  #showDryRunResults(trace, error) {
-    const rows = trace.map((entry) => {
-      const label = esc(_loc(getNodeType(entry.type)?.label ?? entry.type));
-      if (entry.error) return `<li class="glyph-dry-run-error">${label}: ${esc(entry.error)}</li>`;
-      const status = entry.ms !== undefined ? `${entry.ms}ms` : _loc('GLYPH.TREE.dryRunSkipped');
-      return `<li>${label} — ${status}</li>`;
-    });
-    const content = `<ul class="glyph-dry-run-results">${rows.join('') || `<li>${_loc('GLYPH.TREE.dryRunEmpty')}</li>`}</ul>
-      ${error ? `<p class="glyph-dry-run-error">${esc(error.message)}</p>` : ''}
-      <p class="hint">${_loc('GLYPH.TREE.dryRunHint')}</p>`;
-    foundry.applications.api.DialogV2.prompt({ window: { title: _loc('GLYPH.TREE.dryRun') }, content });
   }
 
   /**
@@ -352,7 +273,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       const uuid = target.value || null;
       return this.document.update({ 'system.linkedTile': uuid ? { kind: 'uuid', value: uuid } : null });
     }
-    if (target.matches('.glyph-ref-kind')) this.#syncReferenceKind(target);
+    if (target.matches('.glyph-ref-kind')) await this.#syncReferenceKind(target);
     const { path, widget, numeric } = target.dataset;
     if (!path) return;
     event.stopPropagation();
@@ -381,19 +302,20 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
    * Refresh a reference field's hint and value input the instant its kind changes.
    * @param {HTMLSelectElement} select The `.glyph-ref-kind` select that just changed.
    */
-  #syncReferenceKind(select) {
+  async #syncReferenceKind(select) {
     const wrap = select.closest('.glyph-reference');
     if (!wrap) return;
     const kind = select.value;
     const basePath = select.dataset.path.replace(/\.kind$/, '');
     const hint = select.closest('.glyph-node-field')?.querySelector('.hint');
     if (hint) hint.textContent = _loc(`GLYPH.REFERENCE_KIND_HINT.${kind}`);
-    const replacement =
-      kind === 'context'
-        ? `<input type="text" data-path="${basePath}.value" data-field="value" value="" placeholder="variables.myVar">`
-        : kind === 'uuid'
-          ? `<document-tags data-path="${basePath}.value" data-field="value" type="${wrap.dataset.documentType ?? ''}" single value=""></document-tags>`
-          : '';
+    const partial = kind === 'context' ? 'reference-value-context' : kind === 'uuid' ? 'reference-value-uuid' : null;
+    const replacement = partial
+      ? await foundry.applications.handlebars.renderTemplate(`modules/${MODULE.ID}/templates/partials/${partial}.hbs`, {
+          path: `${basePath}.value`,
+          documentType: wrap.dataset.documentType ?? ''
+        })
+      : '';
     const valueField = wrap.querySelector('[data-field="value"]');
     if (valueField) valueField.outerHTML = replacement;
     else if (replacement) select.insertAdjacentHTML('afterend', replacement);
@@ -409,7 +331,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   }
 
   /**
-   * The actual work behind {@link #mutateHandler}, run one at a time via its queue.
+   * The actual work behind #mutateHandler, run one at a time via its queue.
    * @param {(tree: object) => void} mutator Mutates a cloned copy of the handler's tree in place.
    */
   async #doMutateHandler(mutator) {
@@ -427,6 +349,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       const handlers = { ...this.document.system.handlers, [handler]: tree };
       await this.document.update({ 'system.handlers': foundry.data.operators.ForcedReplacement.create(handlers) });
       this.#pendingTrees.delete(handler);
+      this.render({ parts: ['program'] });
     } catch (error) {
       ui.notifications.error('GLYPH.NOTIFICATIONS.SaveFailed', { format: { error: error.message } });
       this.#pendingTrees.set(handler, tree);
@@ -462,7 +385,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   }
 
   /**
-   * Build the General tab's fieldset structure for `templates/generic/form-fields.hbs`.
+   * Build the General tab's fieldset structure.
    * @returns {object[]} Fieldset descriptors.
    */
   _getGeneralFields() {

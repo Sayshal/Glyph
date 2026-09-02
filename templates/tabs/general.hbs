@@ -2,7 +2,27 @@
   {{#if hint}}
     <p class="hint">{{localize hint}}</p>
   {{/if}}
-  {{{templateHtml}}}
+  <div class="form-group">
+    <label>{{localize "GLYPH.TEMPLATES.label"}}</label>
+    <div class="form-fields">
+      <select class="glyph-template-select" {{#unless hasTemplates}}disabled{{/unless}}>
+        {{#if hasTemplates}}
+          {{#each templateGroups as |group|}}
+            <optgroup label="{{localize (concat "GLYPH.TEMPLATES.CATEGORIES." group.category)}}">
+              {{#each group.entries as |t|}}
+                <option value="{{t.uuid}}">{{t.name}}</option>
+              {{/each}}
+            </optgroup>
+          {{/each}}
+        {{else}}
+          <option value="">{{localize "GLYPH.TEMPLATES.none"}}</option>
+        {{/if}}
+      </select>
+      <button type="button" data-line-action="apply-template" {{#unless hasTemplates}}disabled{{/unless}}>{{localize "GLYPH.TEMPLATES.apply"}}</button>
+      <button type="button" data-line-action="save-template">{{localize "GLYPH.TEMPLATES.save"}}</button>
+    </div>
+    <p class="hint">{{localize "GLYPH.TEMPLATES.hint"}}</p>
+  </div>
   {{#each fields as |outer|}}
     {{#if outer.fieldset}}
       <fieldset>
@@ -15,5 +35,11 @@
       {{formField outer.field value=outer.value label=outer.label hint=outer.hint localize=true}}
     {{/if}}
   {{/each}}
-  {{{linkedTileHtml}}}
+  <div class="form-group">
+    <label>{{localize "BEHAVIOR.TYPES.trigger.FIELDS.linkedTile.label"}}</label>
+    <div class="form-fields">
+      <document-tags class="glyph-linked-tile" type="Tile" single value="{{linkedTileValue}}"></document-tags>
+    </div>
+    <p class="hint">{{localize "BEHAVIOR.TYPES.trigger.FIELDS.linkedTile.hint"}}</p>
+  </div>
 </div>

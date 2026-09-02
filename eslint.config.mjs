@@ -37,6 +37,7 @@ export default [
         RegionBehavior: 'readonly',
         RegionDocument: 'readonly',
         TokenDocument: 'readonly',
+        TileDocument: 'readonly',
         AmbientLightDocument: 'readonly',
         AmbientSoundDocument: 'readonly',
         Actor: 'readonly',

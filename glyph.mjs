@@ -5,6 +5,7 @@ import { registerCalendariaActions } from './scripts/actions/calendaria.mjs';
 import { registerDnd5eActions } from './scripts/actions/dnd5e.mjs';
 import { registerDontForgetActions } from './scripts/actions/dont-forget.mjs';
 import { registerHeroMancerActions } from './scripts/actions/hero-mancer.mjs';
+import './scripts/actions/hurt-heal.mjs';
 import { registerIntegrationActions } from './scripts/actions/integrations.mjs';
 import './scripts/actions/messaging.mjs';
 import { registerMindfulEncountersActions } from './scripts/actions/mindful-encounters.mjs';
@@ -38,7 +39,13 @@ import { registerTriggerLinkEnricher } from './scripts/trigger-link-enricher.mjs
 import './styles/glyph.css';
 
 Hooks.once('init', () => {
-  ATLAS.register(MODULE.ID, { title: MODULE.NAME, github: 'Sayshal/glyph', theme: { scope: '.glyph' } });
+  ATLAS.register(MODULE.ID, { title: MODULE.NAME, github: 'Sayshal/glyph', theme: { scope: '.glyph', default: 'arcane' } });
+  foundry.applications.handlebars.loadTemplates([
+    `${MODULE.TEMPLATES}/partials/tree-node.hbs`,
+    `${MODULE.TEMPLATES}/partials/tree-widget.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-value-context.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-value-uuid.hbs`
+  ]);
   registerTriggerBehavior();
   registerTriggerSheet();
   registerPseudoEvents();
