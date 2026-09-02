@@ -388,17 +388,16 @@ export const ACTION_MAP = {
   },
   playertype: {
     convert: (data) => {
-      const gmTag = data.landing;
-      const playerTag = data.fail;
-      if (!gmTag && !playerTag) throw new Error('no landing tags found to redirect to');
+      const gmTag = data.gm;
+      const playerTag = data.player;
+      if (!gmTag && !playerTag) throw new Error('no redirect tags found');
       return {
         type: 'if',
         condition: '{{event.user.isGM}} == true',
-        then: gmTag ? [{ type: 'goto', tag: gmTag }] : [],
-        else: playerTag ? [{ type: 'goto', tag: playerTag }] : []
+        then: gmTag ? [{ type: 'goto', tag: gmTag }] : [{ type: 'stopActions' }],
+        else: playerTag ? [{ type: 'goto', tag: playerTag }] : [{ type: 'stopActions' }]
       };
-    },
-    partial: 'Best-effort guess at which landing is the GM path and which is the player path - double check both branches go the right way.'
+    }
   },
   method: { manual: 'Branches on how MATT itself was invoked - a MATT-only concept with no glyph equivalent.' }
 };
