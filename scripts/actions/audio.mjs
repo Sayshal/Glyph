@@ -133,8 +133,16 @@ registerNodeType('playPlaylist', {
       name: 'state',
       widget: 'select',
       label: 'GLYPH.ACTIONS.playPlaylist.FIELDS.state.label',
-      choices: { play: 'GLYPH.PLAYLIST_STATE.play', stop: 'GLYPH.PLAYLIST_STATE.stop', next: 'GLYPH.PLAYLIST_STATE.next', previous: 'GLYPH.PLAYLIST_STATE.previous' }
-    }
+      choices: {
+        play: 'GLYPH.PLAYLIST_STATE.play',
+        pause: 'GLYPH.PLAYLIST_STATE.pause',
+        stop: 'GLYPH.PLAYLIST_STATE.stop',
+        next: 'GLYPH.PLAYLIST_STATE.next',
+        previous: 'GLYPH.PLAYLIST_STATE.previous'
+      }
+    },
+    { name: 'volume', widget: 'number', min: 0, max: 1, step: 0.05, label: 'GLYPH.ACTIONS.playPlaylist.FIELDS.volume.label' },
+    { name: 'loop', widget: 'boolean', label: 'GLYPH.ACTIONS.playPlaylist.FIELDS.loop.label' }
   ],
   validate(node) {
     if (!node.target && (typeof node.name !== 'string' || !node.name)) throw new Error('playPlaylist requires either .name or .target.');
@@ -145,8 +153,16 @@ registerNodeType('playPlaylist', {
     const playlist = resolved instanceof Playlist ? resolved : (sound?.parent ?? game.playlists.getName(node.name));
     if (!playlist) return;
     const state = node.state ?? 'play';
-    if (state === 'play') await (sound ? playlist.playSound(sound) : playlist.playAll());
-    else if (state === 'stop') await (sound ? sound.update({ playing: false }) : playlist.stopAll());
+    if (state === 'play') {
+      if (!sound) await playlist.playAll();
+      else {
+        await playlist.playSound(sound);
+        const update = { repeat: !!node.loop };
+        if (typeof node.volume === 'number') update.volume = node.volume;
+        await sound.update(update);
+      }
+    } else if (state === 'pause') await (sound ? sound.update({ playing: false, pausedTime: sound.sound?.currentTime ?? 0 }) : playlist.stopAll());
+    else if (state === 'stop') await (sound ? sound.update({ playing: false, pausedTime: 0 }) : playlist.stopAll());
     else {
       const current = sound ?? playlist.sounds.find((s) => s.playing);
       if (current) await playlist.playNext(current.id, { direction: state === 'next' ? 1 : -1 });

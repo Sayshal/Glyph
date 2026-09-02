@@ -176,11 +176,16 @@ export const ACTION_MAP = {
   },
   playlist: {
     convert: (data) => {
-      const state = { play: 'play', pause: 'stop', stop: 'stop', next: 'next', prev: 'previous' }[data.play];
+      const state = { play: 'play', pause: 'pause', stop: 'stop', next: 'next', prev: 'previous' }[data.play];
       if (!state) throw new Error('unrecognized playlist command has no glyph equivalent');
-      return { type: 'playPlaylist', target: requireRef(data.entity), state };
-    },
-    partial: "Volume and loop settings have no glyph equivalent here and were dropped. Pause became Stop - glyph doesn't have a separate pause state for playlists."
+      const node = { type: 'playPlaylist', target: requireRef(data.entity), state };
+      if (state === 'play') {
+        const rawVolume = data.volume && typeof data.volume === 'object' ? data.volume.value : data.volume;
+        if (Number.isFinite(Number(rawVolume))) node.volume = Number(rawVolume);
+        if (data.loop) node.loop = true;
+      }
+      return node;
+    }
   },
   stopsound: {
     convert: (data) => {
