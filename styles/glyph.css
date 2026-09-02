@@ -26,8 +26,23 @@
     }
 
     &.glyph-node-error {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
       border-color: var(--color-level-error, rgb(170 0 0));
       color: var(--color-level-error, rgb(170 0 0));
+
+      button {
+        all: unset;
+        flex: 0 0 auto;
+        cursor: pointer;
+        opacity: 0.7;
+
+        &:hover {
+          opacity: 1;
+        }
+      }
     }
 
     &.glyph-node-disabled {
@@ -351,6 +366,17 @@
 
   .glyph-dry-run-error {
     color: var(--color-level-error, rgb(170 0 0));
+  }
+
+  .glyph-pending-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin: 0 0 var(--glyph-gap);
+    padding: 0.25rem 0.5rem;
+    border: 0.0625rem solid var(--color-level-warning, rgb(170 130 0));
+    border-radius: 0.25rem;
+    color: var(--color-level-warning, rgb(170 130 0));
   }
 
   .glyph-variables-list {

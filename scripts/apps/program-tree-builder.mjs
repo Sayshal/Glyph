@@ -1,4 +1,6 @@
+import { getAbilityChoices } from '../ability-test-adapters.mjs';
 import { getNodeType, listNodeTypes } from '../nodes/registry.mjs';
+import { getSkillChoices } from '../skill-test-adapters.mjs';
 import { listResolvers } from '../targeting.mjs';
 import { renderCombobox } from './combobox.mjs';
 import { collectLandingTags } from './program-tree-ops.mjs';
@@ -48,6 +50,14 @@ function renderWidget(field, value, path, ui, node) {
       return `<select ${attrs}>${Object.entries(field.choices)
         .map(([v, l]) => `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${_loc(l)}</option>`)
         .join('')}</select>`;
+    case 'systemAbility':
+    case 'systemSkill': {
+      const choices = field.widget === 'systemAbility' ? getAbilityChoices() : getSkillChoices();
+      if (!choices) return `<input type="text" ${attrs} value="${esc(value)}">`;
+      return `<select ${attrs}>${Object.entries(choices)
+        .map(([v, l]) => `<option value="${v}" ${String(value) === v ? 'selected' : ''}>${_loc(l)}</option>`)
+        .join('')}</select>`;
+    }
     case 'multiSelect': {
       const selected = new Set((value ?? []).map(String));
       return `<select ${attrs} multiple>${Object.entries(field.choices)
@@ -221,7 +231,12 @@ function renderSlot(slot, node, path, ui, expanded) {
  */
 export function renderNode(node, path, ui, expanded) {
   const definition = getNodeType(node.type);
-  if (!definition) return `<div class="glyph-node-row glyph-node-error">${_loc('GLYPH.TREE.unknownType', { type: node.type })}</div>`;
+  if (!definition) {
+    const deleteButton = path
+      ? `<button type="button" data-line-action="delete-node" data-path="${path}" aria-label="${_loc('GLYPH.TREE.delete')}" data-tooltip><i class="fa-solid fa-trash"></i></button>`
+      : '';
+    return `<div class="glyph-node-row glyph-node-error" data-node-path="${path}"><span>${_loc('GLYPH.TREE.unknownType', { type: node.type })}</span>${deleteButton}</div>`;
+  }
   const isRoot = path === '';
   const isEnabled = node.enabled !== false;
   const isOpen = isRoot || expanded.has(path);

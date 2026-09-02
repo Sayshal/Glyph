@@ -26,6 +26,9 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
    */
   #pendingTrees = new Map();
 
+  /** @type {Promise} Serializes {@link #mutateHandler} calls so overlapping edits don't race. */
+  #mutationQueue = Promise.resolve();
+
   constructor(options) {
     super(options);
     this.options.window.icon = MODULE.ICON;
@@ -159,6 +162,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     if (!this.#selectedHandler || !handlerNames.includes(this.#selectedHandler)) this.#selectedHandler = handlerNames[0] ?? null;
     context.handlerNames = handlerNames;
     context.selectedHandler = this.#selectedHandler;
+    context.hasPendingChanges = this.#pendingTrees.has(this.#selectedHandler);
     const tree = this.#pendingTrees.get(this.#selectedHandler) ?? system.handlers[this.#selectedHandler] ?? { type: 'sequence', children: [] };
     context.programHtml = this.#selectedHandler ? renderTree(tree, this.document, this.#expanded) : '';
   }
@@ -168,6 +172,26 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     super._onFirstRender(context, options);
     this.element.addEventListener('click', this.#onTreeClick.bind(this));
     this.element.addEventListener('change', this.#onTreeChange.bind(this), { capture: true });
+  }
+
+  /** @inheritDoc */
+  async _onSubmitForm(formConfig, event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    await this.#mutationQueue;
+    const handlersBefore = JSON.stringify(this.document.system.handlers);
+    const { handler, closeOnSubmit } = formConfig;
+    if (typeof handler === 'function') {
+      try {
+        await handler.call(this, event, form, new foundry.applications.ux.FormDataExtended(form));
+      } catch (err) {
+        ui.notifications.error(err, { console: true });
+        return;
+      }
+    }
+    const handlersAfter = JSON.stringify(this.document.system.handlers);
+    if (handlersAfter !== handlersBefore) await this.document.update({ 'system.handlers': JSON.parse(handlersBefore) });
+    if (closeOnSubmit) await this.close({ submitted: true });
   }
 
   /** @inheritDoc */
@@ -376,23 +400,35 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   }
 
   /**
-   * Apply a mutation to the currently-selected handler's tree and force-replace it on the document.
+   * Apply a mutation to the currently-selected handler's tree, queued so overlapping edits don't race.
    * @param {(tree: object) => void} mutator Mutates a cloned copy of the handler's tree in place.
    */
-  async #mutateHandler(mutator) {
+  #mutateHandler(mutator) {
+    this.#mutationQueue = this.#mutationQueue.then(() => this.#doMutateHandler(mutator)).catch(() => {});
+    return this.#mutationQueue;
+  }
+
+  /**
+   * The actual work behind {@link #mutateHandler}, run one at a time via its queue.
+   * @param {(tree: object) => void} mutator Mutates a cloned copy of the handler's tree in place.
+   */
+  async #doMutateHandler(mutator) {
     const handler = this.#selectedHandler;
     if (!handler) return;
     const base = this.#pendingTrees.get(handler) ?? this.document.system.handlers[handler] ?? { type: 'sequence', children: [] };
     const tree = foundry.utils.deepClone(base);
     mutator(tree);
-    if (!this.#isValidTree(handler, tree)) {
+    const validationError = this.#validateTree(handler, tree);
+    if (validationError) {
       this.#pendingTrees.set(handler, tree);
       return this.render({ parts: ['program'] });
     }
     try {
-      await this.document.update({ [`system.handlers.${handler}`]: foundry.data.operators.ForcedReplacement.create(tree) });
+      const handlers = { ...this.document.system.handlers, [handler]: tree };
+      await this.document.update({ 'system.handlers': foundry.data.operators.ForcedReplacement.create(handlers) });
       this.#pendingTrees.delete(handler);
-    } catch {
+    } catch (error) {
+      ui.notifications.error('GLYPH.NOTIFICATIONS.SaveFailed', { format: { error: error.message } });
       this.#pendingTrees.set(handler, tree);
       this.render({ parts: ['program'] });
     }
@@ -402,16 +438,16 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
    * Whether replacing `handler`'s tree with `tree` would pass this behavior type's own schema validation.
    * @param {string} handler The handler key being replaced.
    * @param {object} tree The candidate tree.
-   * @returns {boolean} Whether the candidate is valid.
+   * @returns {Error|null} The validation error, or null if the candidate is valid.
    */
-  #isValidTree(handler, tree) {
+  #validateTree(handler, tree) {
     const current = this.document.system.toObject();
     const candidate = { ...current, handlers: { ...current.handlers, [handler]: tree } };
     try {
       new CONFIG.RegionBehavior.dataModels[this.document.type](candidate, { strict: true });
-      return true;
-    } catch {
-      return false;
+      return null;
+    } catch (error) {
+      return error;
     }
   }
 

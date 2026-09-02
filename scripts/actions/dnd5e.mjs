@@ -1,5 +1,6 @@
 import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
+import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
 import { resolveActorReference, resolveReference } from '../targeting.mjs';
 
 /** dnd5e-only */
@@ -7,12 +8,27 @@ export function registerDnd5eActions() {
   if (game.system.id !== 'dnd5e') return;
 
   /** `Actor5e#rollSavingThrow`/`#rollAbilityCheck` */
-  registerAbilityTestAdapter('dnd5e', async (actor, type, ability, dc) => {
-    const method = type === 'check' ? 'rollAbilityCheck' : 'rollSavingThrow';
-    const rolls = await actor[method]({ ability, target: dc }, { configure: false }, {});
-    const roll = rolls?.[0];
-    return roll ? roll.total >= dc : null;
-  });
+  registerAbilityTestAdapter(
+    'dnd5e',
+    async (actor, type, ability, dc) => {
+      const method = type === 'check' ? 'rollAbilityCheck' : 'rollSavingThrow';
+      const rolls = await actor[method]({ ability, target: dc }, { configure: false }, {});
+      const roll = rolls?.[0];
+      return roll ? roll.total >= dc : null;
+    },
+    Object.fromEntries(Object.entries(CONFIG.DND5E.abilities).map(([key, { label }]) => [key, label]))
+  );
+
+  /** `Actor5e#rollSkill` */
+  registerSkillTestAdapter(
+    'dnd5e',
+    async (actor, skill, dc) => {
+      const rolls = await actor.rollSkill({ skill, target: dc }, { configure: false }, {});
+      const roll = rolls?.[0];
+      return roll ? roll.total >= dc : null;
+    },
+    Object.fromEntries(Object.entries(CONFIG.DND5E.skills).map(([key, { label }]) => [key, label]))
+  );
 
   registerNodeType('dnd5eAttack', {
     category: 'token',

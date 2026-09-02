@@ -15,6 +15,9 @@
       </div>
       <p class="hint">{{localize "GLYPH.TREE.editingHandlerHint"}}</p>
     </div>
+    {{#if hasPendingChanges}}
+      <p class="glyph-pending-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{localize "GLYPH.TREE.pendingWarning"}}</p>
+    {{/if}}
     <div class="glyph-tree">{{{programHtml}}}</div>
   {{else}}
     <p class="hint">{{localize "GLYPH.PLACEHOLDER.program"}}</p>

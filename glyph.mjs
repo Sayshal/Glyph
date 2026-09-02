@@ -10,7 +10,9 @@ import './scripts/actions/messaging.mjs';
 import { registerMindfulEncountersActions } from './scripts/actions/mindful-encounters.mjs';
 import { registerMinstrelActions } from './scripts/actions/minstrel.mjs';
 import { registerPeddlerActions } from './scripts/actions/peddler.mjs';
+import { registerPf2eActions } from './scripts/actions/pf2e.mjs';
 import './scripts/actions/scene.mjs';
+import './scripts/actions/skill-test.mjs';
 import { registerSpellBookActions } from './scripts/actions/spell-book.mjs';
 import { registerTenacityActions } from './scripts/actions/tenacity.mjs';
 import './scripts/actions/tile.mjs';
@@ -47,6 +49,7 @@ Hooks.once('init', () => {
   registerQuickCreate();
   registerTriggerLinkEnricher();
   registerDnd5eActions();
+  registerPf2eActions();
   registerIntegrationActions();
   registerTenacityActions();
   registerPeddlerActions();

@@ -12,9 +12,9 @@ export function registerBondsmithActions() {
     fields: [
       { name: 'id', widget: 'text', label: 'GLYPH.ACTIONS.bondsmithReputation.FIELDS.id.label', hint: 'GLYPH.ACTIONS.bondsmithReputation.FIELDS.id.hint', required: true },
       {
-        name: 'type',
+        name: 'entityType',
         widget: 'select',
-        label: 'GLYPH.ACTIONS.bondsmithReputation.FIELDS.type.label',
+        label: 'GLYPH.ACTIONS.bondsmithReputation.FIELDS.entityType.label',
         required: true,
         choices: { actor: 'GLYPH.BONDSMITH_ENTITY.actor', faction: 'GLYPH.BONDSMITH_ENTITY.faction' }
       },
@@ -25,7 +25,7 @@ export function registerBondsmithActions() {
       if (typeof node.value !== 'number') throw new Error('bondsmithReputation.value must be a number.');
     },
     async execute(node) {
-      await BONDSMITH.api.reputation.set(node.id, node.type, node.value);
+      await BONDSMITH.api.reputation.set(node.id, node.entityType, node.value);
     }
   });
 

@@ -1,4 +1,6 @@
+import { getAbilityChoices } from '../ability-test-adapters.mjs';
 import { getNodeType } from '../nodes/registry.mjs';
+import { getSkillChoices } from '../skill-test-adapters.mjs';
 
 /**
  * Read a value at a dotted path within a program tree, or the tree itself for an empty path.
@@ -66,7 +68,12 @@ export function scaffoldNode(type) {
   if (!definition) throw new Error(`Unknown program node type "${type}".`);
   const node = { type };
   for (const slot of definition.slots ?? []) node[slot.name] = slot.optional ? undefined : [];
-  for (const field of definition.fields ?? []) node[field.name] = WIDGET_DEFAULTS[field.widget] ?? '';
+  for (const field of definition.fields ?? []) {
+    if (field.widget === 'select' && field.choices) node[field.name] = Object.keys(field.choices)[0];
+    else if (field.widget === 'systemAbility') node[field.name] = Object.keys(getAbilityChoices() ?? {})[0] ?? '';
+    else if (field.widget === 'systemSkill') node[field.name] = Object.keys(getSkillChoices() ?? {})[0] ?? '';
+    else node[field.name] = WIDGET_DEFAULTS[field.widget] ?? '';
+  }
   return node;
 }
 
