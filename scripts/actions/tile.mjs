@@ -114,6 +114,19 @@ registerNodeType('changeTileImage', {
   }
 });
 
+registerNodeType('preloadTileImages', {
+  category: 'tile',
+  label: 'GLYPH.ACTIONS.preloadTileImages.label',
+  hint: 'GLYPH.ACTIONS.preloadTileImages.hint',
+  fields: [{ name: 'images', widget: 'json', label: 'GLYPH.ACTIONS.preloadTileImages.FIELDS.images.label', hint: 'GLYPH.ACTIONS.preloadTileImages.FIELDS.images.hint', required: true }],
+  validate(node) {
+    if (!Array.isArray(node.images) || !node.images.length) throw new Error('preloadTileImages.images must be a non-empty array.');
+  },
+  async execute(node) {
+    await Promise.all(node.images.filter((path) => typeof path === 'string' && path).map((path) => foundry.canvas.loadTexture(path)));
+  }
+});
+
 registerRenderIntent('tempTileImage', async ({ tileUuid, src }) => {
   const mesh = fromUuidSync(tileUuid)?.object?.mesh;
   if (!mesh) return;

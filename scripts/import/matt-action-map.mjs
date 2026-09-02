@@ -281,7 +281,14 @@ export const ACTION_MAP = {
   },
   elevation: { convert: (data) => ({ type: 'alter', target: requireRef(data.entity), path: 'elevation', value: requireAbsoluteNumber(data.value) }) },
   resethistory: { convert: () => ({ type: 'resetTriggerHistory' }) },
-  preloadtileimage: { manual: 'Just preloads images into memory for MATT - not needed once converted.' },
+  preloadtileimage: {
+    convert: (data, matt) => {
+      if (referenceFromSentinel(data.entity)) throw new Error("preloading a different tile's images has no glyph equivalent (Preload Tile Images only reads this tile's own image list)");
+      const images = Array.isArray(matt?.files) ? matt.files.filter((f) => typeof f === 'string') : [];
+      if (!images.length) throw new Error("this tile's own configured image list (flags.files) is empty or unreadable");
+      return { type: 'preloadTileImages', images };
+    }
+  },
   tileimage: {
     convert: (data, matt) => {
       const images = Array.isArray(matt?.files) ? matt.files.filter((f) => typeof f === 'string') : [];
