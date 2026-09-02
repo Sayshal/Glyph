@@ -5,9 +5,6 @@ import { registerRenderIntent } from '../queries.mjs';
 import { resolveReference } from '../targeting.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
 
-/** @type {string} The tracking key used when `playSound`/`stopSound` don't specify one. */
-const DEFAULT_SOUND_KEY = 'default';
-
 /** Stop or pause, on this client, every currently-playing Sound matching a source path. */
 registerRenderIntent('stopLoopingSound', ({ src, state }) => {
   for (const sound of game.audio.playing.values()) {
@@ -63,17 +60,29 @@ registerNodeType('playSound', {
       preventOverlap: !!node.preventOverlap,
       fadeIn: node.fadeIn ?? 0
     });
-    if (node.waitForCompletion && !loop) {
-      const sound = await foundry.audio.AudioHelper.preloadSound(node.path);
-      if (sound?.duration) await new Promise((resolve) => setTimeout(resolve, sound.duration * 1000));
-    }
-    if (!loop) return;
     const behavior = context.info.behavior;
-    if (!behavior) return;
-    const key = node.key || DEFAULT_SOUND_KEY;
-    const tracked = (behavior.getFlag(MODULE.ID, 'activeSounds') ?? []).filter((entry) => entry.key !== key);
-    tracked.push({ key, src: node.path });
-    await behavior.setFlag(MODULE.ID, 'activeSounds', tracked);
+    const key = node.key || node.path;
+    let entryId;
+    if (behavior) {
+      const tracked = (behavior.getFlag(MODULE.ID, 'activeSounds') ?? []).filter((entry) => entry.key !== key);
+      entryId = foundry.utils.randomID();
+      tracked.push({ key, src: node.path, id: entryId });
+      await behavior.setFlag(MODULE.ID, 'activeSounds', tracked);
+    }
+    if (loop) return;
+    if (!entryId && !node.waitForCompletion) return;
+    const sound = await foundry.audio.AudioHelper.preloadSound(node.path);
+    if (entryId && sound?.duration) {
+      setTimeout(async () => {
+        const current = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
+        await behavior.setFlag(
+          MODULE.ID,
+          'activeSounds',
+          current.filter((entry) => entry.id !== entryId)
+        );
+      }, sound.duration * 1000);
+    }
+    if (node.waitForCompletion && sound?.duration) await new Promise((resolve) => setTimeout(resolve, sound.duration * 1000));
   }
 });
 

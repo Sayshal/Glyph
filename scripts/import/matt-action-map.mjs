@@ -183,7 +183,10 @@ export const ACTION_MAP = {
     partial: "Volume and loop settings have no glyph equivalent here and were dropped. Pause became Stop - glyph doesn't have a separate pause state for playlists."
   },
   stopsound: {
-    manual: "This stops a tile's currently-playing sound, but MATT never actually records which sound that is - there's nothing to convert. Use Stop Sound by hand instead."
+    convert: (data) => {
+      if (referenceFromSentinel(data.entity)) throw new Error("stopping a different tile's sound has no glyph equivalent (Stop Sound only stops this trigger's own tracked sounds)");
+      return { type: 'stopSound' };
+    }
   },
   showimage: { convert: (data) => ({ type: 'showImage', src: data.imagefile, caption: data.caption ?? '', audience: audienceFromShowto(data.showfor) }) },
   changedoor: {
