@@ -71,19 +71,19 @@ function convertActions(actions, out, matt) {
   for (let i = 0; i < actions.length; i++) {
     const entry = actions[i];
     const filter = FILTER_MAP[entry.action];
-    if (filter && !filter.failLanding(entry.data ?? {})) {
-      const condition = filter.expression(entry.data ?? {});
-      if (condition) {
-        out.report.push({
-          level: 'partial',
-          matt: entry,
-          note: "Converted to an `if` gate wrapping the rest of this chain, using glyph's matching expression function (Stage 14) - review the condition for correctness."
-        });
-        const before = actions.slice(0, i).map((e) => convertAction(e, out, matt));
-        const rest = convertActions(actions.slice(i + 1), out, matt);
-        return [...before, { type: 'if', condition, then: rest }];
-      }
-    }
+    if (!filter) continue;
+    const condition = filter.expression(entry.data ?? {});
+    if (!condition) continue;
+    out.report.push({
+      level: 'partial',
+      matt: entry,
+      note: "Converted to an `if` gate wrapping the rest of this chain, using glyph's matching expression function (Stage 14) - review the condition for correctness."
+    });
+    const before = actions.slice(0, i).map((e) => convertAction(e, out, matt));
+    const rest = convertActions(actions.slice(i + 1), out, matt);
+    const failTag = filter.failLanding(entry.data ?? {});
+    if (failTag) return [...before, { type: 'if', condition, then: [], else: [{ type: 'goto', tag: failTag }] }, ...rest];
+    return [...before, { type: 'if', condition, then: rest }];
   }
   return actions.map((entry) => convertAction(entry, out, matt));
 }
