@@ -133,7 +133,7 @@ const FUNCTIONS = {
   distance: ([a, b, mode]) => (mode === 'edge' ? distanceTo(toEdgePoint(a, toPoint(b)), toEdgePoint(b, toPoint(a))) : distanceTo(toPoint(a), toPoint(b))),
   canSee: ([a, b]) => canSee(toPoint(a), toPoint(b)),
   attribute: ([ref, path]) => foundry.utils.getProperty(ref ?? {}, path),
-  hasItem: ([ref, name]) => !!toActor(ref)?.items.getName(name),
+  hasItem: ([ref, name]) => !!toActor(ref)?.items.find((i) => i.name?.toLowerCase() === String(name).toLowerCase()),
   chance: ([percent]) => Math.random() * 100 < Number(percent),
   count: ([id], context) => resolveCollection(id, context).length,
   tileData: ([path], context) => {
