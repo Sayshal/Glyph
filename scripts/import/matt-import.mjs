@@ -79,6 +79,10 @@ function convertActions(actions, out, matt) {
       const built = buildSetCurrentAbsorption(entry, actions.slice(i + 1), out, matt);
       if (built) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), built.node, ...built.rest];
     }
+    if (entry.action === 'loop') {
+      const built = buildLoopNode(entry, i, actions, out, matt);
+      if (built) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), built.node, ...built.rest];
+    }
     const filter = FILTER_MAP[entry.action];
     if (!filter) continue;
     const condition = filter.expression(entry.data ?? {});
@@ -205,6 +209,68 @@ function buildSetCurrentAbsorption(entry, restEntries, out, matt) {
   });
   const body = convertActions(restEntries.slice(0, count), out, matt).map(rewritePreviousToItem);
   const rest = convertActions(restEntries.slice(count), out, matt);
+  return { node: { type: 'forEach', collection, body }, rest };
+}
+
+/**
+ * Resolve a MATT `loop` action's `entity` to a glyph collection resolver id.
+ * @param {*} entity The raw MATT `entity` value.
+ * @returns {string|null} A `resolveCollection`-compatible id, or null if unbuildable.
+ */
+function loopCollectionFromEntity(entity) {
+  const id = idOf(entity);
+  if (id === 'within' || id === 'players' || id === 'users') return id;
+  if (id?.startsWith('tagger')) return `tag:${id.slice(7)}`;
+  return null;
+}
+
+/**
+ * Build a `forEach` node for a MATT `loop` action, delimiting its body by the stop-before-resume authoring convention.
+ * @param {{action: string, data: object}} entry The MATT `loop` action.
+ * @param {number} index `entry`'s index in `actions`.
+ * @param {{action: string, data: object}[]} actions The tile's whole flat MATT action list.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {{node: object, rest: object[]}|null} The `forEach` node plus the unabsorbed remainder, or null.
+ */
+function buildLoopNode(entry, index, actions, out, matt) {
+  const data = entry.data ?? {};
+  const collection = loopCollectionFromEntity(data.entity);
+  if (!collection || !data.tag) return null;
+  const anchor = actions[index + 1];
+  if (!anchor || anchor.action !== 'anchor' || anchor.data?.tag !== data.tag) return null;
+
+  let bodyEnd = index + 2;
+  let endedByResumeAnchor = false;
+  while (bodyEnd < actions.length) {
+    const a = actions[bodyEnd];
+    if (a.action === 'stop' || a.action === 'stoptriggers') break;
+    if (data.resume && a.action === 'anchor' && a.data?.tag === data.resume) {
+      endedByResumeAnchor = true;
+      break;
+    }
+    bodyEnd++;
+  }
+
+  let resumeIdx = -1;
+  if (data.resume) resumeIdx = endedByResumeAnchor ? bodyEnd : actions.findIndex((a, i) => i > bodyEnd && a.action === 'anchor' && a.data?.tag === data.resume);
+  if (data.resume && resumeIdx === -1) {
+    out.report.push({ level: 'skipped', matt: entry, note: "The Resume landing was never found, so nothing after this loop runs - matching MATT's own behavior when a Resume tag points nowhere." });
+  } else if (!endedByResumeAnchor && resumeIdx > bodyEnd + 1) {
+    out.report.push({
+      level: 'skipped',
+      matt: { actions: actions.slice(bodyEnd + 1, resumeIdx) },
+      note: 'Dropped as unreachable - MATT jumps straight from Stop to the Resume landing, so content between them never runs.'
+    });
+  }
+
+  out.report.push({
+    level: 'partial',
+    matt: entry,
+    note: 'Converted to a For Each over the loop body, delimited by the Landing this loop jumps to and the first Stop (or the Resume landing) that follows - review that the tile actually follows that authoring convention.'
+  });
+  const body = convertActions(actions.slice(index + 2, bodyEnd), out, matt).map(rewritePreviousToItem);
+  const rest = resumeIdx === -1 ? [] : convertActions(actions.slice(resumeIdx + 1), out, matt);
   return { node: { type: 'forEach', collection, body }, rest };
 }
 

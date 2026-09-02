@@ -403,7 +403,10 @@ export const ACTION_MAP = {
   },
   anchor: { convert: (data) => ({ type: 'landing', tag: data.tag }) },
   goto: { convert: (data) => ({ type: 'goto', tag: data.tag, limit: data.limit ? Number(data.limit) || undefined : undefined }) },
-  loop: { manual: 'Rebuild by hand as a For Each over the right collection.' },
+  loop: {
+    manual:
+      "Entity left as Previous/Current (or unset), an unrecognized Landing tag, or a Landing that isn't the very next action have no automatic conversion - rebuild by hand as a For Each over the right collection."
+  },
   stop: {
     convert: (data) => {
       if (referenceFromSentinel(data.entity)) throw new Error("stopping a different tile's chain has no glyph equivalent (stopActions only stops the current run)");
