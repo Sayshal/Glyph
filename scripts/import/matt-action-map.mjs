@@ -472,12 +472,17 @@ export const FILTER_MAP = {
       const continueMode = data.continue ?? 'within';
       if (continueMode === 'always') return true;
       const test = distanceTest(data);
-      if (!test) return null;
-      const id = idOfSentinel(data.entity) ?? 'previous';
-      if (id === 'token') return test('{{token}}');
-      if (id === 'previous' || id === 'current') return test('{{previous}}');
-      const collection = id === 'within' || id === 'players' ? id : id.startsWith('tagger') ? `tag:${id.slice(7)}` : null;
-      return collection ? `${continueMode}("${collection}", ${test('{{item}}')})` : null;
+      return test ? entityQuantifiedTest(data.entity, continueMode, test) : null;
+    },
+    failLanding: () => null
+  },
+  visibility: {
+    expression: (data) => {
+      const target = visibilityTarget(data);
+      if (!target) return null;
+      const continueMode = data.continue ?? 'within';
+      if (continueMode === 'always') return true;
+      return entityQuantifiedTest(data.entity, continueMode, (ref) => `canSee(${ref}, ${target})`);
     },
     failLanding: () => null
   }
@@ -497,6 +502,32 @@ function distanceTest(data) {
   const cmp = data.measure === 'gt' ? '>' : '<=';
   const edge = data.from === 'center' ? '' : ', "edge"';
   return (ref) => `distance(${ref}, {{region}}${edge}) ${cmp} sceneDistance(${value}, "${unit}")`;
+}
+
+/**
+ * Resolve a MATT `visibility` filter's `target` field to an expression operand - the tile itself (unset or `"tile"`), or a Tagger-tagged placeable.
+ * @param {object} data The MATT `visibility` action's data.
+ * @returns {string|null} An expression operand, or null if unbuildable.
+ */
+function visibilityTarget(data) {
+  const id = idOfSentinel(data.target);
+  if (!id || id === 'tile') return '{{region}}';
+  return id.startsWith('tagger') ? `byTag("${id.slice(7)}")` : null;
+}
+
+/**
+ * Build a MATT `entity` filter field's quantified test - a single-ref test for `token`/`previous`/`current`, or an `any()`/`all()` quantifier over a real collection.
+ * @param {*} entity The raw MATT `entity` value.
+ * @param {string} continueMode The MATT `continue` value (`within`/`all`).
+ * @param {(ref: string) => string} test Builds the test expression for a given operand.
+ * @returns {string|null} The full test expression, or null if `entity` doesn't resolve to a buildable source.
+ */
+function entityQuantifiedTest(entity, continueMode, test) {
+  const id = idOfSentinel(entity) ?? 'previous';
+  if (id === 'token') return test('{{token}}');
+  if (id === 'previous' || id === 'current') return test('{{previous}}');
+  const collection = id === 'within' || id === 'players' ? id : id.startsWith('tagger') ? `tag:${id.slice(7)}` : null;
+  return collection ? `${continueMode}("${collection}", ${test('{{item}}')})` : null;
 }
 
 /**

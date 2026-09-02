@@ -72,6 +72,7 @@ const OPERATOR_PATTERN = /\s*(==|!=|>=|<=|>|<)\s*/;
  */
 function toPoint(ref) {
   if (typeof ref?.getCenterPoint === 'function') return ref.getCenterPoint();
+  if (ref?.polygonTree) return ref.polygonTree.bounds.center;
   if (ref?.object?.center) return ref.object.center;
   return ref ?? null;
 }
@@ -94,7 +95,7 @@ function isVisible(ref) {
  * @returns {Point|null}
  */
 function toEdgePoint(ref, towards) {
-  const bounds = ref?.object?.bounds;
+  const bounds = ref?.polygonTree?.bounds ?? ref?.object?.bounds;
   if (!bounds || !towards) return toPoint(ref);
   return { x: Math.min(Math.max(towards.x, bounds.left), bounds.right), y: Math.min(Math.max(towards.y, bounds.top), bounds.bottom) };
 }
@@ -174,6 +175,7 @@ const FUNCTIONS = {
     return behavior ? Object.fromEntries((behavior.getFlag(MODULE.ID, 'variables') ?? []).map((entry) => [entry.name, entry.value]))[name] : undefined;
   },
   hasTag: ([ref, tag]) => (isModuleActive('tagger') ? Tagger.hasTags(ref, tag) : false),
+  byTag: ([tag]) => (isModuleActive('tagger') ? (Tagger.getByTag(tag)[0] ?? null) : null),
   season: () => (isModuleActive('calendaria') ? (CALENDARIA.api.getCurrentSeason()?.name ?? null) : null),
   isRestDay: () => (isModuleActive('calendaria') ? CALENDARIA.api.isRestDay() : false),
   isFestivalDay: () => (isModuleActive('calendaria') ? CALENDARIA.api.isFestivalDay() : false),
