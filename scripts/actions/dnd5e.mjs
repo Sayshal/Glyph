@@ -2,7 +2,7 @@ import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
 import { registerHurtHealAdapter } from '../hurt-heal-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
-import { resolveReference } from '../targeting.mjs';
+import { resolveActorReference } from '../targeting.mjs';
 
 /** dnd5e-only */
 export function registerDnd5eActions() {
@@ -36,17 +36,20 @@ export function registerDnd5eActions() {
     label: 'GLYPH.ACTIONS.dnd5eAttack.label',
     hint: 'GLYPH.ACTIONS.dnd5eAttack.hint',
     fields: [
-      { name: 'item', widget: 'reference', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.item.label', required: true },
+      { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.actor.label', required: true },
+      { name: 'itemId', widget: 'text', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.itemId.label', hint: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.itemId.hint', required: true },
       { name: 'chatCard', widget: 'boolean', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.chatCard.label' },
       { name: 'fastForward', widget: 'boolean', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.fastForward.label', hint: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.fastForward.hint' },
       { name: 'rollDamage', widget: 'boolean', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.rollDamage.label' },
       { name: 'rollMode', widget: 'rollMode', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.rollMode.label' }
     ],
     validate(node) {
-      if (typeof node.item !== 'object') throw new Error('dnd5eAttack.item must be a reference object.');
+      if (typeof node.actor !== 'object') throw new Error('dnd5eAttack.actor must be a reference object.');
+      if (typeof node.itemId !== 'string' || !node.itemId) throw new Error('dnd5eAttack.itemId must be a non-empty string.');
     },
     async execute(node, context) {
-      const item = resolveReference(node.item, context);
+      const actor = resolveActorReference(node.actor, context);
+      const item = actor?.items.get(node.itemId);
       const activity = item?.system.activities?.getByType?.('attack')?.[0];
       if (!activity) return;
       const message = { create: node.chatCard !== false };

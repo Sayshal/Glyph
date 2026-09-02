@@ -252,17 +252,18 @@ export const ACTION_MAP = {
   },
   attack: {
     convert: (data) => {
-      if (data.rollattack && data.rollattack !== 'attack') throw new Error(`"${data.rollattack}" mode needs to be rebuilt by hand (only a direct attack roll converts automatically)`);
+      if (data.rollattack && data.rollattack !== 'true') throw new Error(`"${data.rollattack}" mode needs to be rebuilt by hand (only a direct attack roll converts automatically)`);
+      if (!data.attack?.id) throw new Error('no attack item selected');
       return {
         type: 'dnd5eAttack',
-        item: requireRef(data.attack ?? data.entity),
+        actor: requireRef(data.actor),
+        itemId: data.attack.id,
         chatCard: data.chatcard !== false,
-        fastForward: data.fastforward !== false,
+        fastForward: !!data.fastforward,
         rollDamage: !!data.rolldamage,
         rollMode: data.rollmode
       };
-    },
-    partial: 'This is a best-effort guess at field names - check that the right item and actor were picked up before trusting it.'
+    }
   },
   trigger: {
     manual: "Fires a whole different tile's trigger from here - convert that tile first, then point at it by hand."
