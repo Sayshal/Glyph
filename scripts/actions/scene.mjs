@@ -382,7 +382,8 @@ registerNodeType('teleportToken', {
     },
     { name: 'snap', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.snap.label' },
     { name: 'avoidOccupied', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.avoidOccupied.label' },
-    { name: 'pan', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.pan.label' }
+    { name: 'pan', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.pan.label' },
+    { name: 'keepOrigin', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.keepOrigin.label', hint: 'GLYPH.ACTIONS.teleportToken.FIELDS.keepOrigin.hint' }
   ],
   validate(node) {
     if (typeof node.token !== 'object') throw new Error('teleportToken.token must be a reference object.');
@@ -392,6 +393,10 @@ registerNodeType('teleportToken', {
     const token = resolveReference(node.token, context);
     const destination = resolveReference(node.destination, context);
     if (!(token instanceof TokenDocument) || !(destination instanceof RegionDocument)) return;
+    if (node.keepOrigin && token.parent !== destination.parent) {
+      const { _id, ...tokenData } = token.toObject();
+      await token.parent.createEmbeddedDocuments('Token', [{ ...tokenData, hidden: true }]);
+    }
     await destination.teleportTokens([token], { placement: node.placement ?? 'random', snap: node.snap ?? true, avoidOccupied: node.avoidOccupied ?? true, pan: node.pan });
   }
 });

@@ -121,12 +121,12 @@ export const ACTION_MAP = {
         placement: ['random', 'center', 'relative'].includes(data.position) ? data.position : 'random',
         snap: !!data.remotesnap,
         avoidOccupied: !!data.avoidtokens,
-        pan: !!data.animatepan
+        pan: !!data.animatepan,
+        keepOrigin: data.deletesource !== true
       };
       return entity.single ? teleportNode : { type: 'forEach', collection: entity.collection, body: [teleportNode] };
     },
-    partial:
-      "Glyph always deletes the origin token cleanly on a cross-scene teleport (no leave-behind option) and always lets the destination Region's own triggers fire naturally (no suppress option) - unlike MATT's deletesource/triggerremote, these aren't configurable."
+    partial: "Glyph always lets the destination Region's own triggers fire naturally on a cross-scene teleport (no suppress option) - unlike MATT's triggerremote, this isn't configurable."
   },
   movetoken: { convert: (data) => ({ type: 'moveToken', token: requireRef(data.entity), destination: requirePoint(data.location), snap: !!data.snap }) },
   rotation: { convert: (data) => ({ type: 'rotateToken', token: requireRef(data.entity), rotation: ((requireAbsoluteNumber(data.rotation) % 360) + 360) % 360 }) },
