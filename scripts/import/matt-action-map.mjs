@@ -465,18 +465,35 @@ export const FILTER_MAP = {
   },
   distance: {
     expression: (data) => {
-      if (!data.location) return null;
-      const target = requireRefOrNull(data.location);
-      if (!target) return null;
-      const mode = data.from === 'edge' ? ', "edge"' : '';
-      const op = { equals: '==', notequal: '!=', greaterthan: '>', lessthan: '<', lessthanequal: '<=', greaterthanequal: '>=' }[data.operator] ?? '<=';
-      if (data.continue !== 'any' && data.continue !== 'all') return `distance({{token}}, ${target}${mode}) ${op} ${Number(data.distance) || 0}`;
-      const entityCollection = { players: 'players', users: 'users', 'users:active': 'users:active', tokens: 'within' }[idOfSentinel(data.entity)] ?? 'within';
-      return `${data.continue}("${entityCollection}", distance({{item}}, ${target}${mode}) ${op} ${Number(data.distance) || 0})`;
+      const continueMode = data.continue ?? 'within';
+      if (continueMode === 'always') return true;
+      const test = distanceTest(data);
+      if (!test) return null;
+      const id = idOfSentinel(data.entity) ?? 'previous';
+      if (id === 'token') return test('{{token}}');
+      if (id === 'previous' || id === 'current') return test('{{previous}}');
+      const collection = id === 'within' || id === 'players' ? id : id.startsWith('tagger') ? `tag:${id.slice(7)}` : null;
+      return collection ? `${continueMode}("${collection}", ${test('{{item}}')})` : null;
     },
-    failLanding: (data) => data.fail || null
+    failLanding: () => null
   }
 };
+
+/**
+ * Build a MATT `distance` filter's geometry/distance test against `{{region}}` (the tile itself), for its `measure` field.
+ * @param {object} data The MATT `distance` action's data.
+ * @returns {((ref: string) => string)|null} A function producing the test expression for a given operand, or null if unbuildable.
+ */
+function distanceTest(data) {
+  if (data.measure === 'lt') return (ref) => `insideRegion(${ref}, {{region}})`;
+  const raw = data.distance && typeof data.distance === 'object' ? data.distance.value : data.distance;
+  const value = Number(raw);
+  if (Number.isNaN(value)) return null;
+  const unit = data.unit === 'px' ? 'px' : 'sq';
+  const cmp = data.measure === 'gt' ? '>' : '<=';
+  const edge = data.from === 'center' ? '' : ', "edge"';
+  return (ref) => `distance(${ref}, {{region}}${edge}) ${cmp} sceneDistance(${value}, "${unit}")`;
+}
 
 /**
  * Pull the sentinel id out of a MATT entity value.
@@ -498,18 +515,6 @@ function requireUuidOrNull(entry) {
   } catch {
     return null;
   }
-}
-
-/**
- * `requireRef` rendered as an inline expression operand, or null if unresolved/not a literal point.
- * @param {*} entry The MATT entity/location value.
- * @returns {string|null}
- */
-function requireRefOrNull(entry) {
-  const ref = referenceFromSentinel(entry);
-  if (!ref) return null;
-  if (ref.kind === 'context') return `{{${ref.value}}}`;
-  return `"${ref.value}"`;
 }
 
 /**

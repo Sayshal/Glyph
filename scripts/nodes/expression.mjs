@@ -14,6 +14,26 @@ function distanceTo(a, b) {
 }
 
 /**
+ * Convert a raw grid-square or pixel count into scene distance units, using the active scene's grid.
+ * @param {number} value The raw count.
+ * @param {string} unit `"sq"` (grid squares) or `"px"` (pixels).
+ * @returns {number} The equivalent scene distance.
+ */
+function sceneDistanceFrom(value, unit) {
+  return (unit === 'px' ? value / canvas.grid.size : value) * canvas.grid.distance;
+}
+
+/**
+ * Whether a point lies inside a Region's shape.
+ * @param {Point|null} point The point to test.
+ * @param {RegionDocument|null} region The Region to test against.
+ * @returns {boolean}
+ */
+function pointInsideRegion(point, region) {
+  return !!(point && region?.polygonTree?.testPoint(point));
+}
+
+/**
  * Whether `actor` has the given status effect.
  * @param {Actor} actor The actor to check.
  * @param {string} statusId The status id.
@@ -46,12 +66,13 @@ const OPERATORS = {
 const OPERATOR_PATTERN = /\s*(==|!=|>=|<=|>|<)\s*/;
 
 /**
- * A TokenDocument (or plain point) reference to a measurable point.
+ * A TokenDocument, Region (or other placeable-backed document), or plain point reference to a measurable point.
  * @param {*} ref A resolved operand.
  * @returns {Point|null}
  */
 function toPoint(ref) {
   if (typeof ref?.getCenterPoint === 'function') return ref.getCenterPoint();
+  if (ref?.object?.center) return ref.object.center;
   return ref ?? null;
 }
 
@@ -131,6 +152,8 @@ const FUNCTIONS = {
   visible: ([ref]) => isVisible(ref),
   hasCondition: ([ref, statusId]) => hasCondition(toActor(ref), statusId),
   distance: ([a, b, mode]) => (mode === 'edge' ? distanceTo(toEdgePoint(a, toPoint(b)), toEdgePoint(b, toPoint(a))) : distanceTo(toPoint(a), toPoint(b))),
+  sceneDistance: ([value, unit]) => sceneDistanceFrom(Number(value), unit),
+  insideRegion: ([ref, region]) => pointInsideRegion(toPoint(ref), region),
   canSee: ([a, b]) => canSee(toPoint(a), toPoint(b)),
   attribute: ([ref, path]) => foundry.utils.getProperty(ref ?? {}, path),
   hasItem: ([ref, name]) => !!toActor(ref)?.items.find((i) => i.name?.toLowerCase() === String(name).toLowerCase()),
