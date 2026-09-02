@@ -439,6 +439,10 @@ export const FILTER_MAP = {
     },
     failLanding: (data) => data.fail || null
   },
+  checkdata: {
+    expression: (data) => (data.attribute ? `tileData("${data.attribute}") == ${JSON.stringify(coerceJsonValue(data.value))}` : null),
+    failLanding: (data) => data.fail || null
+  },
   attribute: {
     expression: (data) => (data.attribute ? `attribute({{token}}, "${data.attribute}") == ${JSON.stringify(coerceJsonValue(data.value))}` : null),
     failLanding: () => null
