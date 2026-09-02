@@ -218,8 +218,15 @@ export const ACTION_MAP = {
     convert: (data) => ({ type: 'notification', text: data.text, level: data.type === 'warning' ? 'warn' : (data.type ?? 'info'), audience: audienceFromShowto(data.showto) })
   },
   chatmessage: {
-    convert: (data) => ({ type: 'chatMessage', text: data.text }),
-    partial: 'Flavor text, speaker override, and language options were dropped - the message now always posts as the triggering token.'
+    convert: (data) => {
+      const node = { type: 'chatMessage', text: data.text };
+      if (data.flavor) node.flavor = data.flavor;
+      if (data.incharacter) node.inCharacter = true;
+      const speaker = referenceFromSentinel(data.entity);
+      if (speaker) node.speaker = speaker;
+      return node;
+    },
+    partial: 'Language and chat-bubble options have no glyph equivalent and were dropped.'
   },
   runmacro: { convert: (data) => ({ type: 'runMacro', macroUuid: requireUuid(data.entity), args: data.args ? { matt: data.args } : undefined }) },
   runcode: {

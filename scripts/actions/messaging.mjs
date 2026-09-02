@@ -47,6 +47,9 @@ registerNodeType('chatMessage', {
   hint: 'GLYPH.ACTIONS.chatMessage.hint',
   fields: [
     { name: 'text', widget: 'textarea', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.text.label', hint: INTERPOLATED_TEXT_HINT, required: true },
+    { name: 'flavor', widget: 'text', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.flavor.label', hint: INTERPOLATED_TEXT_HINT },
+    { name: 'speaker', widget: 'reference', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.speaker.label', hint: 'GLYPH.ACTIONS.chatMessage.FIELDS.speaker.hint' },
+    { name: 'inCharacter', widget: 'boolean', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.inCharacter.label' },
     { name: 'rollMode', widget: 'rollMode', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.rollMode.label' }
   ],
   validate(node) {
@@ -54,9 +57,20 @@ registerNodeType('chatMessage', {
   },
   async execute(node, context) {
     const token = context.info.event.data?.token?.object ?? null;
+    const speakerRef = node.speaker ? resolveReference(node.speaker, context) : null;
+    const speaker =
+      speakerRef instanceof Actor
+        ? ChatMessage.getSpeaker({ actor: speakerRef })
+        : speakerRef
+          ? ChatMessage.getSpeaker({ token: speakerRef })
+          : token
+            ? ChatMessage.getSpeaker({ token })
+            : ChatMessage.getSpeaker();
     const chatData = {
       content: interpolate(node.text, context),
-      speaker: token ? ChatMessage.getSpeaker({ token }) : ChatMessage.getSpeaker(),
+      flavor: node.flavor ? interpolate(node.flavor, context) : undefined,
+      style: node.inCharacter ? CONST.CHAT_MESSAGE_STYLES.IC : CONST.CHAT_MESSAGE_STYLES.OOC,
+      speaker,
       author: context.info.event.user?.id
     };
     ChatMessage.applyMode(chatData, node.rollMode);
