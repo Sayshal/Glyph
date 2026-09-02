@@ -94,7 +94,7 @@ function convertActions(actions, out, matt) {
     out.report.push({
       level: 'partial',
       matt: entry,
-      note: "Converted to an `if` gate wrapping the rest of this chain, using glyph's matching expression function (Stage 14) - review the condition for correctness."
+      note: "Converted to an `if` gate using glyph's matching expression function - review the condition."
     });
     const before = actions.slice(0, i).map((e) => convertAction(e, out, matt));
     const rest = convertActions(actions.slice(i + 1), out, matt);
@@ -161,11 +161,7 @@ function buildFirstNode(entry, restEntries, out, matt) {
   if (!collection) return null;
   const pickInfo = pickFromPosition(data.position);
   if (!pickInfo) return null;
-  out.report.push({
-    level: 'partial',
-    matt: entry,
-    note: 'Converted to a For Each that picks one item and lifts the rest of this chain into its body - any reference to MATT\'s "current"/"previous" selection downstream now points at the picked item.'
-  });
+  out.report.push({ level: 'ok', matt: entry });
   const body = convertActions(restEntries, out, matt).map(rewritePreviousToItem);
   return { type: 'forEach', collection, ...pickInfo, body };
 }
@@ -206,11 +202,7 @@ function buildSetCurrentAbsorption(entry, restEntries, out, matt) {
   let count = 0;
   while (count < restEntries.length && TOKEN_BAG_ACTIONS.has(restEntries[count].action)) count++;
   if (count === 0) return null;
-  out.report.push({
-    level: 'partial',
-    matt: entry,
-    note: "Converted to a For Each wrapping the immediately-following action(s) that read MATT's \"current\" selection by default - only plain actions are absorbed this way, not MATT's own filters (which independently narrow that same selection - a chain-level interaction glyph's per-item loop can't faithfully reproduce)."
-  });
+  out.report.push({ level: 'ok', matt: entry });
   const body = convertActions(restEntries.slice(0, count), out, matt).map(rewritePreviousToItem);
   const rest = convertActions(restEntries.slice(count), out, matt);
   return { node: { type: 'forEach', collection, body }, rest };
@@ -259,19 +251,15 @@ function buildLoopNode(entry, index, actions, out, matt) {
   let resumeIdx = -1;
   if (data.resume) resumeIdx = endedByResumeAnchor ? bodyEnd : actions.findIndex((a, i) => i > bodyEnd && a.action === 'anchor' && a.data?.tag === data.resume);
   if (data.resume && resumeIdx === -1) {
-    out.report.push({ level: 'skipped', matt: entry, note: "The Resume landing was never found, so nothing after this loop runs - matching MATT's own behavior when a Resume tag points nowhere." });
+    out.report.push({ level: 'skipped', matt: entry, note: 'The Resume landing was never found - nothing after this loop runs.' });
   } else if (!endedByResumeAnchor && resumeIdx > bodyEnd + 1) {
-    out.report.push({
-      level: 'skipped',
-      matt: { actions: actions.slice(bodyEnd + 1, resumeIdx) },
-      note: 'Dropped as unreachable - MATT jumps straight from Stop to the Resume landing, so content between them never runs.'
-    });
+    out.report.push({ level: 'skipped', matt: { actions: actions.slice(bodyEnd + 1, resumeIdx) }, note: 'Dropped as unreachable between Stop and Resume.' });
   }
 
   out.report.push({
     level: 'partial',
     matt: entry,
-    note: 'Converted to a For Each over the loop body, delimited by the Landing this loop jumps to and the first Stop (or the Resume landing) that follows - review that the tile actually follows that authoring convention.'
+    note: 'Converted to a For Each - assumes the tile follows the stop-before-resume convention.'
   });
   const body = convertActions(actions.slice(index + 2, bodyEnd), out, matt).map(rewritePreviousToItem);
   const rest = resumeIdx === -1 ? [] : convertActions(actions.slice(resumeIdx + 1), out, matt);
@@ -325,13 +313,15 @@ function buildDialogNode(entry, index, actions, out, matt) {
     if (!handler) return null;
     buttons.push({ label: spec.label, handler });
   }
+  const closeHandler = data.close ? (handlerFor(data.close) ?? undefined) : undefined;
 
-  out.report.push({
-    level: 'partial',
-    matt: entry,
-    note: 'Converted to a Show Dialog with each button wired to its own landing, resolved as a separate trigger handler - the Close button and its landing target have no glyph equivalent and were dropped.'
-  });
-  return { type: 'showDialog', title: data.title || '', content: data.content || '', buttons, audience: audienceFromShowto(data.showto) };
+  const template = hasMattTemplate(data);
+  out.report.push(
+    template
+      ? { level: 'partial', matt: entry, note: "Text contains MATT's own {{value...}} template placeholders, which don't resolve against glyph's context - rewrite them by hand." }
+      : { level: 'ok', matt: entry }
+  );
+  return { type: 'showDialog', title: data.title || '', content: data.content || '', buttons, closeHandler, audience: audienceFromShowto(data.showto) };
 }
 
 /**

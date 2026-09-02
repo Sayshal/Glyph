@@ -209,8 +209,9 @@ registerNodeType('openActorSheet', {
 /** @type {Map<string, InstanceType<typeof foundry.applications.api.DialogV2>>} Open showDialog instances, keyed by the triggering behavior's UUID, so closeDialog can find one to close. */
 const openDialogs = new Map();
 
-registerRenderIntent('showDialog', ({ title, content, buttons, behaviorUuid }) => {
+registerRenderIntent('showDialog', ({ title, content, buttons, closeHandler, behaviorUuid }) => {
   openDialogs.get(behaviorUuid)?.close();
+  let submitted = false;
   const dialog = new foundry.applications.api.DialogV2({
     window: { title },
     content: `<p>${content}</p>`,
@@ -218,8 +219,18 @@ registerRenderIntent('showDialog', ({ title, content, buttons, behaviorUuid }) =
       action: `button${i}`,
       label: button.label,
       callback: () => (button.handler ? runTrigger(behaviorUuid, button.handler) : undefined)
-    }))
+    })),
+    submit: () => {
+      submitted = true;
+    }
   });
+  dialog.addEventListener(
+    'close',
+    () => {
+      if (!submitted && closeHandler) runTrigger(behaviorUuid, closeHandler);
+    },
+    { once: true }
+  );
   openDialogs.set(behaviorUuid, dialog);
   dialog.render({ force: true });
 });
@@ -237,6 +248,7 @@ registerNodeType('showDialog', {
     { name: 'title', widget: 'text', label: 'GLYPH.ACTIONS.showDialog.FIELDS.title.label', hint: INTERPOLATED_TEXT_HINT, required: true },
     { name: 'content', widget: 'textarea', label: 'GLYPH.ACTIONS.showDialog.FIELDS.content.label', hint: INTERPOLATED_TEXT_HINT },
     { name: 'buttons', widget: 'json', label: 'GLYPH.ACTIONS.showDialog.FIELDS.buttons.label', hint: 'GLYPH.ACTIONS.showDialog.FIELDS.buttons.hint' },
+    { name: 'closeHandler', widget: 'handlerRef', label: 'GLYPH.ACTIONS.showDialog.FIELDS.closeHandler.label', hint: 'GLYPH.ACTIONS.showDialog.FIELDS.closeHandler.hint' },
     AUDIENCE_FIELD
   ],
   validate(node) {
@@ -250,6 +262,7 @@ registerNodeType('showDialog', {
       title: interpolate(node.title, context),
       content: interpolate(node.content ?? '', context),
       buttons: node.buttons || [],
+      closeHandler: node.closeHandler || undefined,
       behaviorUuid: context.info.behavior.uuid
     });
   }
