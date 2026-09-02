@@ -75,6 +75,10 @@ function convertActions(actions, out, matt) {
       const node = buildFirstNode(entry, actions.slice(i + 1), out, matt);
       if (node) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), node];
     }
+    if (entry.action === 'setcurrent') {
+      const built = buildSetCurrentAbsorption(entry, actions.slice(i + 1), out, matt);
+      if (built) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), built.node, ...built.rest];
+    }
     const filter = FILTER_MAP[entry.action];
     if (!filter) continue;
     const condition = filter.expression(entry.data ?? {});
@@ -94,9 +98,7 @@ function convertActions(actions, out, matt) {
 }
 
 /**
- * Resolve a MATT `first` filter's `entity` to a glyph collection resolver id - only the real
- * multi-item collections; `token`/`previous`/`current` aren't buildable here (MATT's own implicit
- * accumulator, out of scope - see `checkvalue`/`setcurrent`).
+ * Resolve a MATT `first` filter's `entity` to a glyph collection resolver id.
  * @param {*} entity The raw MATT `entity` value.
  * @returns {string|null} A `resolveCollection`-compatible id, or null if unbuildable.
  */
@@ -122,25 +124,23 @@ function pickFromPosition(position) {
 }
 
 /**
- * Replace every `{kind:'context', value:'previous'}` reference in a program tree with `{kind:'context', value:'item'}`.
- * @param {*} node A program node, reference object, or plain value.
+ * Rewrite every `previous`/`current` reference (object or string-embedded `{{previous}}`) in a program tree to `item`.
+ * @param {*} node A program node, reference object, string, or other plain value.
  * @returns {*} The same value, with matching references rewritten in place.
  */
 function rewritePreviousToItem(node) {
+  if (typeof node === 'string') return node.includes('{{previous}}') ? node.replaceAll('{{previous}}', '{{item}}') : node;
   if (!node || typeof node !== 'object') return node;
   if (node.kind === 'context' && node.value === 'previous') return { kind: 'context', value: 'item' };
   for (const [key, value] of Object.entries(node)) {
     if (Array.isArray(value)) node[key] = value.map(rewritePreviousToItem);
-    else if (value && typeof value === 'object') node[key] = rewritePreviousToItem(value);
+    else node[key] = rewritePreviousToItem(value);
   }
   return node;
 }
 
 /**
- * Build a `forEach` node for a MATT `first` filter with an explicit, statically-resolvable `entity` -
- * picks one item and lifts the rest of the chain into its body, rewriting `previous`/`current`
- * references inside to the picked item. Returns null (falls back to the existing manual stub) for
- * the implicit "current" form (`entity` unset/`previous`/`current`) or an unrecognized `position`.
+ * Build a `forEach` node for a MATT `first` filter with an explicit, statically-resolvable `entity`.
  * @param {{action: string, data: object}} entry The MATT `first` action.
  * @param {{action: string, data: object}[]} restEntries The remaining MATT actions in this chain.
  * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
@@ -160,6 +160,52 @@ function buildFirstNode(entry, restEntries, out, matt) {
   });
   const body = convertActions(restEntries, out, matt).map(rewritePreviousToItem);
   return { type: 'forEach', collection, ...pickInfo, body };
+}
+
+/** @type {Set<string>} MATT action ids whose `entity` defaults to the shared "current tokens" selection - plain actions only, no filters. */
+const TOKEN_BAG_ACTIONS = new Set([
+  'teleport',
+  'rotation',
+  'showhide',
+  'alter',
+  'hurtheal',
+  'chatmessage',
+  'activeeffect',
+  'additem',
+  'removeitem',
+  'addtocombat',
+  'elevation',
+  'loop',
+  'target',
+  'scrollingtext',
+  'movetoken'
+]);
+
+/**
+ * Build a `forEach` node for a MATT `setcurrent` action, wrapping the contiguous run of immediately-following plain actions that consume the same selection.
+ * @param {{action: string, data: object}} entry The MATT `setcurrent` action.
+ * @param {{action: string, data: object}[]} restEntries The remaining MATT actions in this chain.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {{node: object, rest: object[]}|null} The `forEach` node plus the unabsorbed remainder, or null.
+ */
+function buildSetCurrentAbsorption(entry, restEntries, out, matt) {
+  const data = entry.data ?? {};
+  if ((data.action ?? 'add') !== 'replace' || data.owners) return null;
+  const id = idOf(data.entity);
+  const collection = id === 'within' || id === 'players' ? id : null;
+  if (!collection) return null;
+  let count = 0;
+  while (count < restEntries.length && TOKEN_BAG_ACTIONS.has(restEntries[count].action)) count++;
+  if (count === 0) return null;
+  out.report.push({
+    level: 'partial',
+    matt: entry,
+    note: "Converted to a For Each wrapping the immediately-following action(s) that read MATT's \"current\" selection by default - only plain actions are absorbed this way, not MATT's own filters (which independently narrow that same selection - a chain-level interaction glyph's per-item loop can't faithfully reproduce)."
+  });
+  const body = convertActions(restEntries.slice(0, count), out, matt).map(rewritePreviousToItem);
+  const rest = convertActions(restEntries.slice(count), out, matt);
+  return { node: { type: 'forEach', collection, body }, rest };
 }
 
 /**

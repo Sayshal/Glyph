@@ -382,7 +382,10 @@ export const ACTION_MAP = {
       };
     }
   },
-  setcurrent: { manual: "Relies on a MATT-only concept (a mutable working list) that glyph doesn't have. No conversion possible." },
+  setcurrent: {
+    manual:
+      'Add/Remove/Clear modes, the Owners flag, a Tagger/Users entity, or a selection nothing immediately following actually reads have no automatic conversion - rebuild by hand as a For Each choosing the collection yourself.'
+  },
   shuffle: { manual: 'Same MATT-only concept as Set Current Collection - no glyph equivalent.' },
   url: { convert: (data) => ({ type: 'openURL', url: /^https?:\/\//.test(data.url) ? data.url : `http://${data.url}` }) },
   runbatch: { manual: 'Internal MATT bookkeeping with nothing to convert - not needed in glyph.' },
