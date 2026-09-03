@@ -110,40 +110,43 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
   /**
    * Run this behavior's handler for `event`, gating first.
    * @param {object} event A core RegionEvent or a pseudo-event.
-   * @returns {Promise<void>}
+   * @returns {Promise<import('../run-context.mjs').RunContext|null>} The finished run's context, or null if it didn't run.
    */
   async run(event) {
     const source = normalizeRunSource(event);
     const handler = this.handlers[source.event.name];
     if (!handler) {
       ATLAS.log(2, `Glyph: "${source.event.name}" fired on Region "${source.region.name}" with no handler configured.`);
-      return;
+      return null;
     }
     const uuid = this.parent.uuid;
-    const tail = (runQueues.get(uuid) ?? Promise.resolve()).then(() => this.#runQueued(source, handler)).catch(() => {});
+    const tail = (runQueues.get(uuid) ?? Promise.resolve()).then(() => this.#runQueued(source, handler)).catch(() => null);
     runQueues.set(uuid, tail);
-    await tail;
+    const result = await tail;
     if (runQueues.get(uuid) === tail) runQueues.delete(uuid);
+    return result;
   }
 
   /**
    * Gate and execute one already-queued trigger.
    * @param {RunSource} source The normalized run source.
    * @param {object} handler The handler tree to run.
-   * @returns {Promise<void>}
+   * @returns {Promise<import('../run-context.mjs').RunContext|null>} The finished run's context, or null if it didn't run.
    */
   async #runQueued(source, handler) {
-    if (!(await checkGates(this.parent, source.event))) return;
-    if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, this.parent, source.event) === false) return;
+    if (!(await checkGates(this.parent, source.event))) return null;
+    if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, this.parent, source.event) === false) return null;
+    const context = createRunContext(source, this.parent);
     try {
-      await runNode(handler, createRunContext(source, this.parent));
+      await runNode(handler, context);
     } catch (error) {
       ATLAS.log(1, `Glyph: Trigger "${source.event.name}" on Region "${source.region.name}" failed.`, error);
       await recordFailure(this.parent, source.event, error);
       await sendRenderIntent(source.event.user, 'triggerFailed', { region: source.region.name, error: error.message });
-      return;
+      return null;
     }
     Hooks.callAll(MODULE.HOOKS.TRIGGER, this.parent, source.event);
+    return context;
   }
 }
 

@@ -281,7 +281,17 @@ export const ACTION_MAP = {
     }
   },
   trigger: {
-    manual: "Fires a whole different tile's trigger from here - convert that tile first, then point at it by hand."
+    convert: (data) => {
+      if (data.landing) throw new Error('a Landing target has no glyph equivalent - needs a core engine change');
+      const targetRef = referenceFromSentinel(data.entity);
+      if (!targetRef || targetRef.kind !== 'uuid') throw new Error('trigger target must reference a specific Tile');
+      const node = { type: 'triggerBehavior', behavior: { kind: '__pendingBehavior', value: targetRef.value } };
+      const tokenRef = referenceFromSentinel(data.token);
+      if (tokenRef) node.token = tokenRef;
+      if (data.allowdisabled) node.allowDisabled = true;
+      if (data.return === false) node.mergeResult = false;
+      return node;
+    }
   },
   scene: { convert: (data) => ({ type: 'changeScene', sceneUuid: requireUuid(data.sceneid), activate: !!data.activate }) },
   scenebackground: { convert: (data) => ({ type: 'changeSceneBackground', sceneUuid: requireUuid(data.sceneid), src: data.img }) },

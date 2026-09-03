@@ -355,15 +355,23 @@ registerNodeType('triggerBehavior', {
   category: 'scene',
   label: 'GLYPH.ACTIONS.triggerBehavior.label',
   hint: 'GLYPH.ACTIONS.triggerBehavior.hint',
-  fields: [{ name: 'behavior', widget: 'reference', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.behavior.label', required: true }],
+  fields: [
+    { name: 'behavior', widget: 'reference', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.behavior.label', required: true },
+    { name: 'token', widget: 'reference', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.token.label', hint: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.token.hint' },
+    { name: 'allowDisabled', widget: 'boolean', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.allowDisabled.label' },
+    { name: 'mergeResult', widget: 'boolean', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.mergeResult.label', hint: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.mergeResult.hint' }
+  ],
   validate(node) {
     if (typeof node.behavior !== 'object') throw new Error('triggerBehavior.behavior must be a reference object.');
   },
   async execute(node, context) {
     const target = resolveReference(node.behavior, context);
     if (!(target instanceof RegionBehavior) || target.type !== MODULE.BEHAVIOR_TYPE) return;
+    if (target.disabled && !node.allowDisabled) return;
     const { name, data, user } = context.info.event;
-    await target.system.run({ name, data, region: target.parent, user });
+    const tokenOverride = node.token ? resolveReference(node.token, context) : null;
+    const result = await target.system.run({ name, data: tokenOverride ? { ...data, token: tokenOverride } : data, region: target.parent, user });
+    if (result && node.mergeResult !== false) context.previous = result.previous;
   }
 });
 

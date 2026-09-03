@@ -363,6 +363,22 @@ export function resolveDestinations(node, regionRefByDestId) {
 }
 
 /**
+ * Replace every pending `trigger` target in a program tree with the real Behavior UUID created for that Tile.
+ * @param {object} node A program node (recurses through `children`/`then`/`else`/`body`).
+ * @param {Record<string, string>} behaviorUuidByTileUuid Tile UUID -> its converted Behavior UUID.
+ * @returns {object} The same node, with pending behaviors resolved in place.
+ */
+export function resolvePendingBehaviors(node, behaviorUuidByTileUuid) {
+  if (!node || typeof node !== 'object') return node;
+  if (node.type === 'triggerBehavior' && node.behavior?.kind === '__pendingBehavior') {
+    const uuid = behaviorUuidByTileUuid[node.behavior.value];
+    node.behavior = uuid ? { kind: 'uuid', value: uuid } : null;
+  }
+  for (const key of ['children', 'then', 'else', 'body']) if (Array.isArray(node[key])) node[key] = node[key].map((child) => resolvePendingBehaviors(child, behaviorUuidByTileUuid));
+  return node;
+}
+
+/**
  * Create the auto-generated destination Region for one queued teleport target.
  * @param {{uuid?: string, point?: {x: number, y: number, sceneId: string|null}}} destination A queued destination descriptor.
  * @param {Scene} fallbackScene The scene a sceneless raw-point destination falls back to.
@@ -470,17 +486,42 @@ export async function commitConversions(scene, entries) {
   }
 
   const regions = [];
+  const behaviorUuidByTileUuid = {};
+  const pendingIndexes = [];
   for (const { tile, converted } of entries) {
     const system = foundry.utils.deepClone(converted.system);
+    let hasPending = false;
     for (const event of Object.keys(system.handlers)) {
       system.handlers[event] = resolveStubs(system.handlers[event], macroUuidByStubId);
       system.handlers[event] = resolveDestinations(system.handlers[event], regionRefByDestId);
+      if (JSON.stringify(system.handlers[event]).includes('__pendingBehavior')) hasPending = true;
     }
     const [region] = await scene.createEmbeddedDocuments('Region', [
       { name: tile.name || 'MATT Import', shapes: [converted.regionShape], behaviors: [{ type: MODULE.BEHAVIOR_TYPE, system, disabled: converted.disabled }] }
     ]);
     regions.push(region);
+    behaviorUuidByTileUuid[tile.uuid] = region.behaviors.find((b) => b.type === MODULE.BEHAVIOR_TYPE)?.uuid;
+    if (hasPending) pendingIndexes.push(regions.length - 1);
     if (!converted.linkedTile) await tile.delete();
   }
+
+  for (const i of pendingIndexes) {
+    const oldRegion = regions[i];
+    const { converted } = entries[i];
+    const system = foundry.utils.deepClone(converted.system);
+    for (const event of Object.keys(system.handlers)) {
+      system.handlers[event] = resolveStubs(system.handlers[event], macroUuidByStubId);
+      system.handlers[event] = resolveDestinations(system.handlers[event], regionRefByDestId);
+      system.handlers[event] = resolvePendingBehaviors(system.handlers[event], behaviorUuidByTileUuid);
+    }
+    const disabled = oldRegion.behaviors.find((b) => b.type === MODULE.BEHAVIOR_TYPE)?.disabled ?? false;
+    const name = oldRegion.name;
+    const shapes = oldRegion.shapes.map((s) => s.toObject());
+    await oldRegion.delete();
+    const [newRegion] = await scene.createEmbeddedDocuments('Region', [{ name, shapes, behaviors: [{ type: MODULE.BEHAVIOR_TYPE, system, disabled }] }]);
+    regions[i] = newRegion;
+    behaviorUuidByTileUuid[entries[i].tile.uuid] = newRegion.behaviors.find((b) => b.type === MODULE.BEHAVIOR_TYPE)?.uuid;
+  }
+
   return regions;
 }
