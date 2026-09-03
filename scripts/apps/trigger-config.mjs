@@ -1,10 +1,7 @@
 import { MODULE } from '../constants.mjs';
-import { runNode } from '../nodes/executor.mjs';
-import { getNodeType } from '../nodes/registry.mjs';
-import { createRunContext } from '../run-context.mjs';
 import { applyTemplate, listTemplates, saveTemplate } from '../templates.mjs';
 import { Combobox } from './combobox.mjs';
-import { esc, renderTree } from './program-tree-builder.mjs';
+import { buildTree } from './program-tree-builder.mjs';
 import { deleteAtPath, getAtPath, moveAtPath, scaffoldNode } from './program-tree-ops.mjs';
 
 const { DocumentSheetV2 } = foundry.applications.api;
@@ -18,13 +15,11 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   /** @type {Set<string>} Node paths currently expanded in the Program tab tree. */
   #expanded = new Set();
 
-  /**
-   * @type {Map<string, object>} Per-handler tree edits that failed schema validation on save (e.g.
-   * a freshly-added node with an empty required field) - kept here instead of being silently
-   * dropped, so the invalid node stays visible and editable until it becomes valid. Cleared for a
-   * handler once its tree saves successfully, or a template is applied over it.
-   */
+  /** @type {Map<string, object>} Per-handler tree edits that failed schema validation on save. */
   #pendingTrees = new Map();
+
+  /** @type {Promise} Serializes #mutateHandler calls so overlapping edits don't race. */
+  #mutationQueue = Promise.resolve();
 
   constructor(options) {
     super(options);
@@ -37,7 +32,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     viewPermission: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER,
     position: { width: 640, height: 'auto' },
     window: { contentClasses: ['standard-form'], resizable: true },
-    form: { submitOnChange: true, closeOnSubmit: false }
+    form: { closeOnSubmit: true }
   };
 
   /** @inheritDoc */
@@ -69,12 +64,33 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     const context = await super._prepareContext(options);
     context.fields = this._getGeneralFields();
     context.hint = 'BEHAVIOR.TYPES.trigger.hint';
-    context.linkedTileHtml = this._renderLinkedTileWidget();
-    context.templateHtml = await this._renderTemplateWidget();
+    context.linkedTileValue = this.document.system.linkedTile?.value ?? '';
     context.buttons = [{ type: 'submit', icon: 'fa-solid fa-floppy-disk', label: 'BEHAVIOR.ACTIONS.update' }];
+    await this._prepareTemplateContext(context);
     this._prepareProgramContext(context);
+    this._prepareVariablesContext(context);
     this._prepareHistoryContext(context);
     return context;
+  }
+
+  /**
+   * Populate the General tab's save/apply-template controls.
+   * @param {object} context The render context, mutated in place.
+   */
+  async _prepareTemplateContext(context) {
+    const templates = await listTemplates();
+    const groups = Object.groupBy(templates, (t) => t.category);
+    context.templateGroups = Object.entries(groups).map(([category, entries]) => ({ category, entries }));
+    context.hasTemplates = templates.length > 0;
+  }
+
+  /**
+   * Populate the Variables tab's persisted key/value list.
+   * @param {object} context The render context, mutated in place.
+   */
+  _prepareVariablesContext(context) {
+    const variables = this.document.getFlag(MODULE.ID, 'variables') ?? [];
+    context.variableEntries = variables.map((entry, index) => ({ index, name: entry.name, valueLabel: JSON.stringify(entry.value) }));
   }
 
   /**
@@ -88,48 +104,9 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
         index,
         name: entry.name,
         error: entry.error ?? null,
-        timeLabel: _loc('GLYPH.HISTORY.timeAgo', { seconds: Math.max(0, game.time.worldTime - entry.time) })
+        timeLabel: foundry.utils.timeSince(new Date(entry.time))
       }))
       .reverse();
-  }
-
-  /**
-   * Render the linkedTile document picker as a raw HTML fragment for the General tab.
-   * @returns {string} The widget's HTML.
-   */
-  _renderLinkedTileWidget() {
-    const value = this.document.system.linkedTile?.value ?? '';
-    return `<div class="form-group">
-      <label>${_loc('BEHAVIOR.TYPES.trigger.FIELDS.linkedTile.label')}</label>
-      <div class="form-fields">
-        <document-tags class="glyph-linked-tile" type="Tile" single value="${value}"></document-tags>
-      </div>
-      <p class="hint">${_loc('BEHAVIOR.TYPES.trigger.FIELDS.linkedTile.hint')}</p>
-    </div>`;
-  }
-
-  /**
-   * Render the save/apply-template controls as a raw HTML fragment for the General tab.
-   * @returns {Promise<string>} The widget's HTML.
-   */
-  async _renderTemplateWidget() {
-    const templates = await listTemplates();
-    const groups = Object.groupBy(templates, (t) => t.category);
-    const options = Object.entries(groups)
-      .map(
-        ([category, entries]) =>
-          `<optgroup label="${esc(_loc(`GLYPH.TEMPLATES.CATEGORIES.${category}`))}">${entries.map((t) => `<option value="${esc(t.uuid)}">${esc(t.name)}</option>`).join('')}</optgroup>`
-      )
-      .join('');
-    return `<div class="form-group">
-      <label>${_loc('GLYPH.TEMPLATES.label')}</label>
-      <div class="form-fields">
-        <select class="glyph-template-select" ${templates.length ? '' : 'disabled'}>${options || `<option value="">${_loc('GLYPH.TEMPLATES.none')}</option>`}</select>
-        <button type="button" data-line-action="apply-template" ${templates.length ? '' : 'disabled'}>${_loc('GLYPH.TEMPLATES.apply')}</button>
-        <button type="button" data-line-action="save-template">${_loc('GLYPH.TEMPLATES.save')}</button>
-      </div>
-      <p class="hint">${_loc('GLYPH.TEMPLATES.hint')}</p>
-    </div>`;
   }
 
   /** @inheritDoc */
@@ -149,15 +126,36 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     if (!this.#selectedHandler || !handlerNames.includes(this.#selectedHandler)) this.#selectedHandler = handlerNames[0] ?? null;
     context.handlerNames = handlerNames;
     context.selectedHandler = this.#selectedHandler;
+    context.hasPendingChanges = this.#pendingTrees.has(this.#selectedHandler);
     const tree = this.#pendingTrees.get(this.#selectedHandler) ?? system.handlers[this.#selectedHandler] ?? { type: 'sequence', children: [] };
-    context.programHtml = this.#selectedHandler ? renderTree(tree, this.document, this.#expanded) : '';
+    context.tree = this.#selectedHandler ? buildTree(tree, this.document, this.#expanded) : null;
   }
 
   /** @inheritDoc */
   _onFirstRender(context, options) {
     super._onFirstRender(context, options);
     this.element.addEventListener('click', this.#onTreeClick.bind(this));
-    this.element.addEventListener('change', this.#onTreeChange.bind(this));
+    this.element.addEventListener('change', this.#onTreeChange.bind(this), { capture: true });
+  }
+
+  /** @inheritDoc */
+  async _onSubmitForm(formConfig, event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    await this.#mutationQueue;
+    const handlersBefore = JSON.stringify(this.document.system.handlers);
+    const { handler, closeOnSubmit } = formConfig;
+    if (typeof handler === 'function') {
+      try {
+        await handler.call(this, event, form, new foundry.applications.ux.FormDataExtended(form));
+      } catch (err) {
+        ui.notifications.error(err, { console: true });
+        return;
+      }
+    }
+    const handlersAfter = JSON.stringify(this.document.system.handlers);
+    if (handlersAfter !== handlersBefore) await this.document.update({ 'system.handlers': JSON.parse(handlersBefore) });
+    if (closeOnSubmit) await this.close({ submitted: true });
   }
 
   /** @inheritDoc */
@@ -207,12 +205,17 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
         node.enabled = node.enabled === false;
       });
     }
-    if (lineAction === 'dry-run') return this.#runDryRun();
     if (lineAction === 'delete-history') {
       const history = this.document.getFlag(MODULE.ID, 'history') ?? [];
       history.splice(Number(index), 1);
       return this.document.setFlag(MODULE.ID, 'history', history);
     }
+    if (lineAction === 'delete-variable') {
+      const variables = this.document.getFlag(MODULE.ID, 'variables') ?? [];
+      variables.splice(Number(index), 1);
+      return this.document.setFlag(MODULE.ID, 'variables', variables);
+    }
+    if (lineAction === 'add-variable') return this.#addVariable();
     if (lineAction === 'save-template') return this.#saveTemplate();
     if (lineAction === 'apply-template') {
       const uuid = this.element.querySelector('.glyph-template-select')?.value;
@@ -223,55 +226,35 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     }
   }
 
+  /** Add or overwrite a persistent variable from the Variables tab's input row, upserting by name. */
+  async #addVariable() {
+    const nameInput = this.element.querySelector('.glyph-variable-name');
+    const valueInput = this.element.querySelector('.glyph-variable-value');
+    const name = nameInput.value.trim();
+    if (!name) return;
+    let value;
+    try {
+      value = valueInput.value === '' ? '' : JSON.parse(valueInput.value);
+    } catch {
+      value = valueInput.value;
+    }
+    const variables = [...(this.document.getFlag(MODULE.ID, 'variables') ?? [])];
+    const index = variables.findIndex((entry) => entry.name === name);
+    const record = { name, value };
+    if (index === -1) variables.push(record);
+    else variables[index] = record;
+    await this.document.setFlag(MODULE.ID, 'variables', variables);
+    nameInput.value = '';
+    valueInput.value = '';
+  }
+
   /** Prompt for a name and save this behavior's configuration as a reusable template. */
   async #saveTemplate() {
-    const result = await foundry.applications.api.DialogV2.input({
-      window: { title: _loc('GLYPH.TEMPLATES.save') },
-      content: `<div class="form-group">
-        <label>${_loc('GLYPH.TEMPLATES.nameLabel')}</label>
-        <div class="form-fields"><input type="text" name="name" required></div>
-      </div>`
-    });
+    const content = await foundry.applications.handlebars.renderTemplate(`modules/${MODULE.ID}/templates/partials/save-template-dialog.hbs`, {});
+    const result = await foundry.applications.api.DialogV2.input({ window: { title: _loc('GLYPH.TEMPLATES.save') }, content });
     if (!result?.name) return;
     await saveTemplate(this.document, result.name);
     this.render({ parts: ['general'] });
-  }
-
-  /** Run the selected handler's tree with every real action skipped, to preview its shape without touching game state. */
-  async #runDryRun() {
-    const handler = this.#selectedHandler;
-    if (!handler) return;
-    const behavior = this.document;
-    const root = behavior.system.handlers[handler] ?? { type: 'sequence', children: [] };
-    const source = { region: behavior.parent, scene: behavior.parent?.parent ?? null, event: { name: handler, data: {}, user: game.user } };
-    const context = createRunContext(source, behavior);
-    context.dryRun = true;
-    context.trace = [];
-    let error = null;
-    try {
-      await runNode(root, context);
-    } catch (err) {
-      error = err;
-    }
-    this.#showDryRunResults(context.trace, error);
-  }
-
-  /**
-   * Show a dry run's trace: every node visited, in order, with its outcome.
-   * @param {{type: string, ms?: number, error?: string}[]} trace Trace entries from the dry run.
-   * @param {Error|null} error The error that halted the run, if any.
-   */
-  #showDryRunResults(trace, error) {
-    const rows = trace.map((entry) => {
-      const label = esc(_loc(getNodeType(entry.type)?.label ?? entry.type));
-      if (entry.error) return `<li class="glyph-dry-run-error">${label}: ${esc(entry.error)}</li>`;
-      const status = entry.ms !== undefined ? `${entry.ms}ms` : _loc('GLYPH.TREE.dryRunSkipped');
-      return `<li>${label} — ${status}</li>`;
-    });
-    const content = `<ul class="glyph-dry-run-results">${rows.join('') || `<li>${_loc('GLYPH.TREE.dryRunEmpty')}</li>`}</ul>
-      ${error ? `<p class="glyph-dry-run-error">${esc(error.message)}</p>` : ''}
-      <p class="hint">${_loc('GLYPH.TREE.dryRunHint')}</p>`;
-    foundry.applications.api.DialogV2.prompt({ window: { title: _loc('GLYPH.TREE.dryRun') }, content });
   }
 
   /**
@@ -281,15 +264,19 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   async #onTreeChange(event) {
     const target = event.target;
     if (target.matches('.glyph-handler-select')) {
+      event.stopPropagation();
       this.#selectedHandler = target.value;
       return this.render({ parts: ['program'] });
     }
     if (target.matches('.glyph-linked-tile')) {
+      event.stopPropagation();
       const uuid = target.value || null;
       return this.document.update({ 'system.linkedTile': uuid ? { kind: 'uuid', value: uuid } : null });
     }
+    if (target.matches('.glyph-ref-kind')) await this.#syncReferenceKind(target);
     const { path, widget, numeric } = target.dataset;
     if (!path) return;
+    event.stopPropagation();
     let value;
     if (target.tagName === 'SELECT' && target.multiple) value = [...target.selectedOptions].map((o) => o.value);
     else if (target.type === 'checkbox') value = target.checked;
@@ -302,27 +289,69 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       }
     } else if (numeric && Array.isArray(value)) value = value.map(Number);
     else if (target.type === 'number') value = Number(value);
-    await this.#mutateHandler((tree) => foundry.utils.setProperty(tree, path, value));
+    await this.#mutateHandler((tree) => {
+      if (path.endsWith('.kind') || path.endsWith('.value')) {
+        const parentPath = path.slice(0, path.lastIndexOf('.'));
+        if (typeof foundry.utils.getProperty(tree, parentPath) !== 'object') foundry.utils.setProperty(tree, parentPath, { kind: 'uuid', value: '' });
+      }
+      foundry.utils.setProperty(tree, path, value);
+    });
   }
 
   /**
-   * Apply a mutation to the currently-selected handler's tree and force-replace it on the document.
+   * Refresh a reference field's hint and value input the instant its kind changes.
+   * @param {HTMLSelectElement} select The `.glyph-ref-kind` select that just changed.
+   */
+  async #syncReferenceKind(select) {
+    const wrap = select.closest('.glyph-reference');
+    if (!wrap) return;
+    const kind = select.value;
+    const basePath = select.dataset.path.replace(/\.kind$/, '');
+    const hint = select.closest('.glyph-node-field')?.querySelector('.hint');
+    if (hint) hint.textContent = _loc(`GLYPH.REFERENCE_KIND_HINT.${kind}`);
+    const partial = kind === 'context' ? 'reference-value-context' : kind === 'uuid' ? 'reference-value-uuid' : null;
+    const replacement = partial
+      ? await foundry.applications.handlebars.renderTemplate(`modules/${MODULE.ID}/templates/partials/${partial}.hbs`, {
+          path: `${basePath}.value`,
+          documentType: wrap.dataset.documentType ?? ''
+        })
+      : '';
+    const valueField = wrap.querySelector('[data-field="value"]');
+    if (valueField) valueField.outerHTML = replacement;
+    else if (replacement) select.insertAdjacentHTML('afterend', replacement);
+  }
+
+  /**
+   * Apply a mutation to the currently-selected handler's tree, queued so overlapping edits don't race.
    * @param {(tree: object) => void} mutator Mutates a cloned copy of the handler's tree in place.
    */
-  async #mutateHandler(mutator) {
+  #mutateHandler(mutator) {
+    this.#mutationQueue = this.#mutationQueue.then(() => this.#doMutateHandler(mutator)).catch(() => {});
+    return this.#mutationQueue;
+  }
+
+  /**
+   * The actual work behind #mutateHandler, run one at a time via its queue.
+   * @param {(tree: object) => void} mutator Mutates a cloned copy of the handler's tree in place.
+   */
+  async #doMutateHandler(mutator) {
     const handler = this.#selectedHandler;
     if (!handler) return;
     const base = this.#pendingTrees.get(handler) ?? this.document.system.handlers[handler] ?? { type: 'sequence', children: [] };
     const tree = foundry.utils.deepClone(base);
     mutator(tree);
-    if (!this.#isValidTree(handler, tree)) {
+    const validationError = this.#validateTree(handler, tree);
+    if (validationError) {
       this.#pendingTrees.set(handler, tree);
       return this.render({ parts: ['program'] });
     }
     try {
-      await this.document.update({ [`system.handlers.${handler}`]: foundry.data.operators.ForcedReplacement.create(tree) });
+      const handlers = { ...this.document.system.handlers, [handler]: tree };
+      await this.document.update({ 'system.handlers': foundry.data.operators.ForcedReplacement.create(handlers) });
       this.#pendingTrees.delete(handler);
-    } catch {
+      this.render({ parts: ['program'] });
+    } catch (error) {
+      ui.notifications.error('GLYPH.NOTIFICATIONS.SaveFailed', { format: { error: error.message } });
       this.#pendingTrees.set(handler, tree);
       this.render({ parts: ['program'] });
     }
@@ -332,16 +361,16 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
    * Whether replacing `handler`'s tree with `tree` would pass this behavior type's own schema validation.
    * @param {string} handler The handler key being replaced.
    * @param {object} tree The candidate tree.
-   * @returns {boolean} Whether the candidate is valid.
+   * @returns {Error|null} The validation error, or null if the candidate is valid.
    */
-  #isValidTree(handler, tree) {
+  #validateTree(handler, tree) {
     const current = this.document.system.toObject();
     const candidate = { ...current, handlers: { ...current.handlers, [handler]: tree } };
     try {
       new CONFIG.RegionBehavior.dataModels[this.document.type](candidate, { strict: true });
-      return true;
-    } catch {
-      return false;
+      return null;
+    } catch (error) {
+      return error;
     }
   }
 
@@ -356,7 +385,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   }
 
   /**
-   * Build the General tab's fieldset structure for `templates/generic/form-fields.hbs`.
+   * Build the General tab's fieldset structure.
    * @returns {object[]} Fieldset descriptors.
    */
   _getGeneralFields() {

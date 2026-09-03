@@ -1,4 +1,6 @@
+import { getAbilityChoices } from '../ability-test-adapters.mjs';
 import { getNodeType } from '../nodes/registry.mjs';
+import { getSkillChoices } from '../skill-test-adapters.mjs';
 
 /**
  * Read a value at a dotted path within a program tree, or the tree itself for an empty path.
@@ -8,17 +10,6 @@ import { getNodeType } from '../nodes/registry.mjs';
  */
 export function getAtPath(root, path) {
   return path ? foundry.utils.getProperty(root, path) : root;
-}
-
-/**
- * Write a scalar value at a dotted path. Cannot target the root itself.
- * @param {object} root The handler's root node.
- * @param {string} path A non-empty dotted path.
- * @param {*} value The value to write.
- */
-export function setAtPath(root, path, value) {
-  if (!path) throw new Error('setAtPath cannot replace the root node.');
-  foundry.utils.setProperty(root, path, value);
 }
 
 /**
@@ -60,11 +51,7 @@ export function moveAtPath(root, path, offset) {
 }
 
 /** @type {Record<string, *>} Default value per field widget kind, when scaffolding a new node. */
-const WIDGET_DEFAULTS = {
-  boolean: false,
-  number: 0,
-  multiSelect: []
-};
+const WIDGET_DEFAULTS = { boolean: false, number: 0, multiSelect: [], reference: { kind: 'uuid', value: '' } };
 
 /**
  * Build a minimal valid node of `type`, with every slot initialized empty and every field defaulted.
@@ -76,7 +63,12 @@ export function scaffoldNode(type) {
   if (!definition) throw new Error(`Unknown program node type "${type}".`);
   const node = { type };
   for (const slot of definition.slots ?? []) node[slot.name] = slot.optional ? undefined : [];
-  for (const field of definition.fields ?? []) node[field.name] = WIDGET_DEFAULTS[field.widget] ?? '';
+  for (const field of definition.fields ?? []) {
+    if (field.widget === 'select' && field.choices) node[field.name] = Object.keys(field.choices)[0];
+    else if (field.widget === 'systemAbility') node[field.name] = Object.keys(getAbilityChoices() ?? {})[0] ?? '';
+    else if (field.widget === 'systemSkill') node[field.name] = Object.keys(getSkillChoices() ?? {})[0] ?? '';
+    else node[field.name] = WIDGET_DEFAULTS[field.widget] ?? '';
+  }
   return node;
 }
 

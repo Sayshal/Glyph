@@ -1,20 +1,41 @@
 import { MODULE } from './constants.mjs';
+import { query, registerQuery } from './queries.mjs';
 
 /**
  * Dispatch a pseudo-event to every subscribed, non-disabled trigger behavior in `regions`.
  * @param {Iterable<RegionDocument>} regions Candidate regions to check.
  * @param {string} name The pseudo-event name.
  * @param {object} [data] Event-specific payload.
+ * @param {User} [user] The user that triggered the event. Defaults to the local user.
  */
-export function dispatchPseudoEvent(regions, name, data = {}) {
+export function dispatchPseudoEvent(regions, name, data = {}, user = game.user) {
   for (const region of regions) {
     if (region.hidden) continue;
     for (const behavior of region.behaviors) {
       if (behavior.disabled || behavior.type !== MODULE.BEHAVIOR_TYPE) continue;
       if (!behavior.system.pseudoEvents.has(name)) continue;
-      behavior.system._handleRegionEvent({ name, data, region, user: game.user });
+      behavior.system._handleRegionEvent({ name, data, region, user });
     }
   }
+}
+
+registerQuery('runPseudoEvent', ({ regionUuids, name, tokenUuid }, { user }) => {
+  const regions = regionUuids.map((uuid) => fromUuidSync(uuid)).filter(Boolean);
+  dispatchPseudoEvent(regions, name, { token: tokenUuid ? fromUuidSync(tokenUuid) : null }, user);
+});
+
+/**
+ * Dispatch a single-client interaction pseudo-event (click family, hover), relaying to the primary GM when non-primary.
+ * @param {RegionDocument[]} regions Candidate regions to check.
+ * @param {string} name The pseudo-event name.
+ * @param {object} [data] Event-specific payload; `data.token`, if present, must be a TokenDocument.
+ */
+function dispatchInteractivePseudoEvent(regions, name, data = {}) {
+  if (!regions.length) return;
+  if (ATLAS.isPrimaryGM) return dispatchPseudoEvent(regions, name, data);
+  const gm = ATLAS.primaryGM;
+  if (!gm) return;
+  query(gm, 'runPseudoEvent', { regionUuids: regions.map((r) => r.uuid), name, tokenUuid: data.token?.uuid ?? null });
 }
 
 const hoveredRegions = new Set();
@@ -50,7 +71,7 @@ function regionsAtPoint(pos) {
  */
 function checkRegionClick(name) {
   const regions = regionsAtPoint(canvas.mousePosition);
-  if (regions.length) dispatchPseudoEvent(regions, name, { token: canvas.tokens.controlled[0]?.document ?? null });
+  dispatchInteractivePseudoEvent(regions, name, { token: canvas.tokens.controlled[0]?.document ?? null });
 }
 
 /**
@@ -66,7 +87,7 @@ function checkRegionHover(pos) {
     if (isHovered !== wasHovered) {
       if (isHovered) hoveredRegions.add(region.id);
       else hoveredRegions.delete(region.id);
-      dispatchPseudoEvent([region], isHovered ? 'hoverIn' : 'hoverOut');
+      dispatchInteractivePseudoEvent([region], isHovered ? 'hoverIn' : 'hoverOut');
     }
     if (isHovered && isInteractiveRegion(region)) anyInteractive = true;
   }

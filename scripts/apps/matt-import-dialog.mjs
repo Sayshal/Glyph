@@ -27,14 +27,16 @@ export class MattImportDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     id: 'glyph-matt-import',
     tag: 'div',
     classes: ['glyph', 'glyph-matt-import'],
-    window: { title: 'GLYPH.IMPORT.title', icon: 'fa-solid fa-file-import' },
+    window: { title: 'GLYPH.IMPORT.title', icon: 'fa-solid fa-file-import', contentClasses: ['standard-form'] },
     position: { width: 720, height: 'auto' },
     actions: { commit: MattImportDialog.#onCommit }
   };
 
   /** @inheritDoc */
   static PARTS = {
-    main: { template: `modules/${MODULE.ID}/templates/matt-import.hbs`, scrollable: ['.glyph-import-tiles'] }
+    summary: { template: `modules/${MODULE.ID}/templates/matt-import-summary.hbs` },
+    tiles: { template: `modules/${MODULE.ID}/templates/matt-import-tiles.hbs`, scrollable: [''] },
+    footer: { template: 'templates/generic/form-footer.hbs' }
   };
 
   /** @inheritDoc */
@@ -46,8 +48,11 @@ export class MattImportDialog extends HandlebarsApplicationMixin(ApplicationV2) 
         counts[entry.level]++;
         if (entry.level !== 'ok') issues.push({ level: entry.level, note: entry.note, matt: JSON.stringify(entry.matt) });
       }
-      return { name: tile.name || tile.id, counts, issues, linked: !!converted.linkedTile };
+      const tier = counts.manual > 0 ? 0 : counts.partial > 0 || counts.skipped > 0 ? 1 : 2;
+      const badge = _loc(`GLYPH.IMPORT.LEVELS.${counts.manual > 0 ? 'manual' : 'partial'}`);
+      return { name: tile.name || tile.id, counts, issues, linked: !!converted.linkedTile, tier, badge };
     });
+    rows.sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
     const totals = rows.reduce(
       (sum, row) => ({ ok: sum.ok + row.counts.ok, partial: sum.partial + row.counts.partial, manual: sum.manual + row.counts.manual, skipped: sum.skipped + row.counts.skipped }),
       {
@@ -57,7 +62,8 @@ export class MattImportDialog extends HandlebarsApplicationMixin(ApplicationV2) 
         skipped: 0
       }
     );
-    return { rows, totals, tileCount: this.#entries.length };
+    const buttons = [{ type: 'button', action: 'commit', icon: 'fa-solid fa-check', label: 'GLYPH.IMPORT.commit' }];
+    return { rows, totals, tileCount: this.#entries.length, buttons };
   }
 
   /**

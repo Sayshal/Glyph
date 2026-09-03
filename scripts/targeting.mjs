@@ -28,13 +28,22 @@ export function listResolvers() {
  */
 export function resolveCollection(id, context) {
   if (context.collections.has(id)) return context.collections.get(id);
-  const result = resolvers.get(id)?.resolve(context) ?? [];
+  const result = id.startsWith('tag:') ? resolveTaggedCollection(id.slice(4)) : (resolvers.get(id)?.resolve(context) ?? []);
   context.collections.set(id, result);
   return result;
 }
 
 /**
- * Resolve a glyph reference (`{kind, value, scope}`, see scripts/data/reference-field.mjs).
+ * Every placeable carrying a given Tagger tag.
+ * @param {string} tag The tag to look up.
+ * @returns {object[]} Matching placeables' documents.
+ */
+function resolveTaggedCollection(tag) {
+  return isModuleActive('tagger') ? Tagger.getByTag(tag) : [];
+}
+
+/**
+ * Resolve a glyph reference (`{kind, value, scope}`).
  * @param {{kind: string, value: string, scope?: string}} ref The reference to resolve.
  * @param {import('./run-context.mjs').RunContext} context The active run context.
  * @returns {*} The resolved value, or null if it can't be resolved.
@@ -42,12 +51,34 @@ export function resolveCollection(id, context) {
 export function resolveReference(ref, context) {
   if (!ref) return null;
   if (ref.kind === 'uuid') {
-    const relative = ref.scope ? foundry.utils.fromUuidSync(ref.scope) : undefined;
-    return foundry.utils.fromUuidSync(ref.value, relative ? { relative } : undefined);
+    const relative = ref.scope ? fromUuidSync(ref.scope) : undefined;
+    return fromUuidSync(ref.value, relative ? { relative } : undefined);
   }
   if (ref.kind === 'tag') return isModuleActive('tagger') ? (Tagger.getByTag(ref.value)[0] ?? null) : null;
   if (ref.kind === 'context') return resolvePath(context, ref.value);
+  if (ref.kind === 'triggerToken') return context.info.event.data?.token ?? null;
+  if (ref.kind === 'triggerActor') return context.info.event.data?.token?.actor ?? null;
   return null;
+}
+
+/**
+ * Unwrap an already-resolved value to its Actor - a Token document (or placeable) is a reasonable stand-in.
+ * @param {*} resolved A resolved document or placeable.
+ * @returns {Actor|null} The actor, or null.
+ */
+export function toActor(resolved) {
+  if (resolved instanceof Actor) return resolved;
+  return resolved?.actor ?? null;
+}
+
+/**
+ * Resolve a reference that must produce an Actor, unwrapping a resolved Token.
+ * @param {{kind: string, value: string, scope?: string}} ref The reference to resolve.
+ * @param {import('./run-context.mjs').RunContext} context The active run context.
+ * @returns {Actor|null} The resolved actor, or null.
+ */
+export function resolveActorReference(ref, context) {
+  return toActor(resolveReference(ref, context));
 }
 
 registerResolver('region', { label: 'This Region', producedType: 'Region', resolve: (context) => [context.info.region] });

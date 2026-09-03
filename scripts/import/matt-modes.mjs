@@ -1,5 +1,3 @@
-/** MATT "When" trigger mode -> glyph `events`/`pseudoEvents`. */
-
 /**
  * @typedef {object} ModeMapping
  * @property {string[]} [events] Core `RegionEvent` names this mode maps to.

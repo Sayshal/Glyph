@@ -1,0 +1,87 @@
+<div class="glyph-node">
+  {{#if unknown}}
+    <div class="glyph-node-row glyph-node-error" data-node-path="{{path}}">
+      <span>{{typeLabel}}</span>
+      {{#unless isRoot}}
+        <button type="button" data-line-action="delete-node" data-path="{{path}}" aria-label="{{deleteLabel}}"
+          data-tooltip><i class="fa-solid fa-trash"></i></button>
+      {{/unless}}
+    </div>
+  {{else if isRoot}}
+    <div class="glyph-node-root">
+      {{#each slots}}
+        {{#each this.rows}}
+          {{> "modules/glyph/templates/partials/tree-node.hbs" this}}
+        {{/each}}
+        <div class="glyph-add-node-bar">{{{this.addNodeComboboxHtml}}}</div>
+      {{/each}}
+    </div>
+  {{else}}
+    <div
+      class="glyph-node-row{{#if structural}} glyph-node-structural{{/if}}{{#unless isEnabled}} glyph-node-disabled{{/unless}}"
+      data-node-path="{{path}}" data-node-type="{{type}}">
+      <div class="glyph-node-header">
+        {{#if showToggle}}
+          <button type="button" class="glyph-node-toggle" data-line-action="toggle-node" data-path="{{path}}"
+            aria-label="{{toggleLabel}}" data-tooltip><i class="fa-solid {{toggleIcon}}"></i></button>
+        {{else}}
+          <span class="glyph-node-toggle-spacer"></span>
+        {{/if}}
+        <i class="glyph-node-icon fa-solid {{icon}}"></i>
+        <span class="glyph-node-label">{{label}}</span>
+        {{#unless isRoot}}
+          <div class="glyph-node-controls">
+            <button type="button" data-line-action="toggle-enabled" data-path="{{path}}" aria-label="{{enableLabel}}"
+              data-tooltip><i class="fa-solid {{enableIcon}}"></i></button>
+            <button type="button" data-line-action="move-up" data-path="{{path}}" aria-label="{{moveUpLabel}}"
+              data-tooltip><i class="fa-solid fa-arrow-up"></i></button>
+            <button type="button" data-line-action="move-down" data-path="{{path}}" aria-label="{{moveDownLabel}}"
+              data-tooltip><i class="fa-solid fa-arrow-down"></i></button>
+            <button type="button" data-line-action="delete-node" data-path="{{path}}" aria-label="{{deleteLabel}}"
+              data-tooltip><i class="fa-solid fa-trash"></i></button>
+          </div>
+        {{/unless}}
+      </div>
+      {{#if showBody}}
+        <div class="glyph-node-body">
+          {{#each fields}}
+            <div class="form-group glyph-node-field">
+              <label>{{this.label}}{{#if this.required}} *{{/if}}</label>
+              <div class="form-fields">{{> "modules/glyph/templates/partials/tree-widget.hbs" this.widget}}</div>
+              {{#if this.hint}}
+                <p class="hint">{{this.hint}}</p>
+              {{/if}}
+            </div>
+          {{/each}}
+          {{#each slots}}
+            {{#if this.isEmpty}}
+              <div class="glyph-slot glyph-slot-empty" data-slot-path="{{this.slotPath}}">
+                <button type="button" class="glyph-add-slot" data-line-action="add-slot"
+                  data-slot-path="{{this.slotPath}}">
+                  <i class="fa-solid fa-plus"></i> {{this.label}}
+                </button>
+              </div>
+            {{else}}
+              <div class="glyph-slot" data-slot-path="{{this.slotPath}}">
+                <div class="glyph-slot-header">
+                  <span>{{this.label}}</span>
+                  {{#if this.optional}}
+                    <button type="button" class="glyph-remove-slot" data-line-action="remove-slot"
+                      data-slot-path="{{this.slotPath}}" aria-label="{{this.removeLabel}}" data-tooltip><i
+                        class="fa-solid fa-xmark"></i></button>
+                  {{/if}}
+                </div>
+                <div class="glyph-slot-rows">
+                  {{#each this.rows}}
+                    {{> "modules/glyph/templates/partials/tree-node.hbs" this}}
+                  {{/each}}
+                </div>
+                <div class="glyph-add-node-bar">{{{this.addNodeComboboxHtml}}}</div>
+              </div>
+            {{/if}}
+          {{/each}}
+        </div>
+      {{/if}}
+    </div>
+  {{/if}}
+</div>

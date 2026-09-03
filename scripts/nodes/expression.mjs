@@ -1,8 +1,58 @@
 import { isModuleActive } from '../capability.mjs';
 import { MODULE } from '../constants.mjs';
-import { canSee, distanceTo, hasCondition } from '../predicates.mjs';
 import { resolvePath } from '../run-context.mjs';
-import { resolveCollection, resolveReference } from '../targeting.mjs';
+import { resolveCollection, resolveReference, toActor } from '../targeting.mjs';
+
+/**
+ * Grid distance between two points, in scene distance units.
+ * @param {Point} a The first point.
+ * @param {Point} b The second point.
+ * @returns {number} The measured distance.
+ */
+function distanceTo(a, b) {
+  return canvas.grid.measurePath([a, b]).distance;
+}
+
+/**
+ * Convert a raw grid-square or pixel count into scene distance units, using the active scene's grid.
+ * @param {number} value The raw count.
+ * @param {string} unit `"sq"` (grid squares) or `"px"` (pixels).
+ * @returns {number} The equivalent scene distance.
+ */
+function sceneDistanceFrom(value, unit) {
+  return (unit === 'px' ? value / canvas.grid.size : value) * canvas.grid.distance;
+}
+
+/**
+ * Whether a point lies inside a Region's shape.
+ * @param {Point|null} point The point to test.
+ * @param {RegionDocument|null} region The Region to test against.
+ * @returns {boolean}
+ */
+function pointInsideRegion(point, region) {
+  return !!(point && region?.polygonTree?.testPoint(point));
+}
+
+/**
+ * Whether `actor` has the given status effect.
+ * @param {Actor} actor The actor to check.
+ * @param {string} statusId The status id.
+ * @returns {boolean}
+ */
+function hasCondition(actor, statusId) {
+  return actor?.statuses.has(statusId) ?? false;
+}
+
+/**
+ * Whether a ray between two points is unobstructed by a sight-blocking wall.
+ * @param {Point} a The origin point.
+ * @param {Point} b The destination point.
+ * @returns {boolean}
+ */
+function canSee(a, b) {
+  if (!a || !b) return false;
+  return !CONFIG.Canvas.polygonBackends.sight.testCollision(a, b, { type: 'sight', mode: 'any' });
+}
 
 const OPERATORS = {
   '==': (a, b) => a === b,
@@ -16,22 +66,14 @@ const OPERATORS = {
 const OPERATOR_PATTERN = /\s*(==|!=|>=|<=|>|<)\s*/;
 
 /**
- * A TokenDocument (or Actor) reference to the Actor it represents.
- * @param {*} ref A resolved operand.
- * @returns {Actor|null}
- */
-function toActor(ref) {
-  if (ref instanceof Actor) return ref;
-  return ref?.actor ?? null;
-}
-
-/**
- * A TokenDocument (or plain point) reference to a measurable point.
+ * A TokenDocument, Region (or other placeable-backed document), or plain point reference to a measurable point.
  * @param {*} ref A resolved operand.
  * @returns {Point|null}
  */
 function toPoint(ref) {
   if (typeof ref?.getCenterPoint === 'function') return ref.getCenterPoint();
+  if (ref?.polygonTree) return ref.polygonTree.bounds.center;
+  if (ref?.object?.center) return ref.object.center;
   return ref ?? null;
 }
 
@@ -53,7 +95,7 @@ function isVisible(ref) {
  * @returns {Point|null}
  */
 function toEdgePoint(ref, towards) {
-  const bounds = ref?.object?.bounds;
+  const bounds = ref?.polygonTree?.bounds ?? ref?.object?.bounds;
   if (!bounds || !towards) return toPoint(ref);
   return { x: Math.min(Math.max(towards.x, bounds.left), bounds.right), y: Math.min(Math.max(towards.y, bounds.top), bounds.bottom) };
 }
@@ -65,7 +107,7 @@ function toEdgePoint(ref, towards) {
  * @returns {RegionBehavior|null}
  */
 function toVariableBehavior(ref, context) {
-  const behavior = ref instanceof RegionBehavior ? ref : typeof ref === 'string' && ref ? foundry.utils.fromUuidSync(ref) : (context.info.behavior ?? null);
+  const behavior = ref instanceof RegionBehavior ? ref : typeof ref === 'string' && ref ? fromUuidSync(ref) : (context.info.behavior ?? null);
   return behavior instanceof RegionBehavior ? behavior : null;
 }
 
@@ -106,14 +148,16 @@ function evaluateQuantifier(name, argsRaw, context) {
   return name === 'any' ? results.some(Boolean) : results.every(Boolean);
 }
 
-/** @type {Record<string, (args: unknown[], context: import('../run-context.mjs').RunContext) => unknown>} Functions callable from an expression, e.g. `chance(50)`. Args are themselves resolved operands (not nested calls). */
+/** @type {Record<string, (args: unknown[], context: import('../run-context.mjs').RunContext) => unknown>} Functions callable from an expression. */
 const FUNCTIONS = {
   visible: ([ref]) => isVisible(ref),
   hasCondition: ([ref, statusId]) => hasCondition(toActor(ref), statusId),
   distance: ([a, b, mode]) => (mode === 'edge' ? distanceTo(toEdgePoint(a, toPoint(b)), toEdgePoint(b, toPoint(a))) : distanceTo(toPoint(a), toPoint(b))),
+  sceneDistance: ([value, unit]) => sceneDistanceFrom(Number(value), unit),
+  insideRegion: ([ref, region]) => pointInsideRegion(toPoint(ref), region),
   canSee: ([a, b]) => canSee(toPoint(a), toPoint(b)),
   attribute: ([ref, path]) => foundry.utils.getProperty(ref ?? {}, path),
-  hasItem: ([ref, name]) => !!toActor(ref)?.items.getName(name),
+  hasItem: ([ref, name]) => !!toActor(ref)?.items.find((i) => i.name?.toLowerCase() === String(name).toLowerCase()),
   chance: ([percent]) => Math.random() * 100 < Number(percent),
   count: ([id], context) => resolveCollection(id, context).length,
   tileData: ([path], context) => {
@@ -131,6 +175,7 @@ const FUNCTIONS = {
     return behavior ? Object.fromEntries((behavior.getFlag(MODULE.ID, 'variables') ?? []).map((entry) => [entry.name, entry.value]))[name] : undefined;
   },
   hasTag: ([ref, tag]) => (isModuleActive('tagger') ? Tagger.hasTags(ref, tag) : false),
+  byTag: ([tag]) => (isModuleActive('tagger') ? (Tagger.getByTag(tag)[0] ?? null) : null),
   season: () => (isModuleActive('calendaria') ? (CALENDARIA.api.getCurrentSeason()?.name ?? null) : null),
   isRestDay: () => (isModuleActive('calendaria') ? CALENDARIA.api.isRestDay() : false),
   isFestivalDay: () => (isModuleActive('calendaria') ? CALENDARIA.api.isFestivalDay() : false),

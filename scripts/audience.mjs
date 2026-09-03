@@ -1,4 +1,4 @@
-import { sendRenderIntent } from './render-intent.mjs';
+import { sendRenderIntent } from './queries.mjs';
 
 /**
  * Resolve an audience keyword to the users a player-facing render action should reach.

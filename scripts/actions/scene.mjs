@@ -1,7 +1,7 @@
 import { sendToAudience } from '../audience.mjs';
 import { MODULE } from '../constants.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { registerRenderIntent } from '../render-intent.mjs';
+import { registerRenderIntent } from '../queries.mjs';
 import { resolveReference } from '../targeting.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
 
@@ -52,7 +52,16 @@ registerNodeType('adjustDarkness', {
       label: 'GLYPH.ACTIONS.adjustDarkness.FIELDS.mode.label',
       choices: { override: 'GLYPH.DARKNESS_MODE.override', brighten: 'GLYPH.DARKNESS_MODE.brighten', darken: 'GLYPH.DARKNESS_MODE.darken' }
     },
-    { name: 'modifier', widget: 'number', min: 0, max: 1, step: 0.01, label: 'GLYPH.ACTIONS.adjustDarkness.FIELDS.modifier.label', required: true },
+    {
+      name: 'modifier',
+      widget: 'number',
+      min: 0,
+      max: 1,
+      step: 0.01,
+      label: 'GLYPH.ACTIONS.adjustDarkness.FIELDS.modifier.label',
+      hint: 'GLYPH.ACTIONS.adjustDarkness.FIELDS.modifier.hint',
+      required: true
+    },
     { name: 'duration', widget: 'number', min: 0, step: 100, label: 'GLYPH.ACTIONS.adjustDarkness.FIELDS.duration.label', hint: 'GLYPH.ACTIONS.adjustDarkness.FIELDS.duration.hint' }
   ],
   validate(node) {
@@ -107,7 +116,14 @@ registerNodeType('changeSceneBackground', {
   label: 'GLYPH.ACTIONS.changeSceneBackground.label',
   hint: 'GLYPH.ACTIONS.changeSceneBackground.hint',
   fields: [
-    { name: 'sceneUuid', widget: 'uuid', documentType: 'Scene', label: 'GLYPH.ACTIONS.changeSceneBackground.FIELDS.sceneUuid.label', required: true },
+    {
+      name: 'sceneUuid',
+      widget: 'uuid',
+      documentType: 'Scene',
+      label: 'GLYPH.ACTIONS.changeSceneBackground.FIELDS.sceneUuid.label',
+      hint: 'GLYPH.ACTIONS.changeSceneBackground.FIELDS.sceneUuid.hint',
+      required: true
+    },
     { name: 'src', widget: 'file', filePickerType: 'image', label: 'GLYPH.ACTIONS.changeSceneBackground.FIELDS.src.label', required: true }
   ],
   validate(node) {
@@ -127,7 +143,7 @@ registerNodeType('pingLocation', {
   label: 'GLYPH.ACTIONS.pingLocation.label',
   hint: 'GLYPH.ACTIONS.pingLocation.hint',
   fields: [
-    { name: 'location', widget: 'point', label: 'GLYPH.ACTIONS.pingLocation.FIELDS.location.label', required: true },
+    { name: 'location', widget: 'point', label: 'GLYPH.ACTIONS.pingLocation.FIELDS.location.label', hint: 'GLYPH.ACTIONS.FIELDS.worldPoint.hint', required: true },
     {
       name: 'style',
       widget: 'select',
@@ -266,10 +282,10 @@ registerNodeType('changeWallDoor', {
       label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.state.label',
       choices: { open: 'GLYPH.DOOR_STATE.open', closed: 'GLYPH.DOOR_STATE.closed', locked: 'GLYPH.DOOR_STATE.locked', toggle: 'GLYPH.DOOR_STATE.toggle' }
     },
-    { name: 'move', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.move.label', choices: WALL_RESTRICTION_CHOICES },
-    { name: 'light', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.light.label', choices: WALL_RESTRICTION_CHOICES },
-    { name: 'sight', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.sight.label', choices: WALL_RESTRICTION_CHOICES },
-    { name: 'sound', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.sound.label', choices: WALL_RESTRICTION_CHOICES }
+    { name: 'move', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.move.label', hint: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.restriction.hint', choices: WALL_RESTRICTION_CHOICES },
+    { name: 'light', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.light.label', hint: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.restriction.hint', choices: WALL_RESTRICTION_CHOICES },
+    { name: 'sight', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.sight.label', hint: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.restriction.hint', choices: WALL_RESTRICTION_CHOICES },
+    { name: 'sound', widget: 'select', label: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.sound.label', hint: 'GLYPH.ACTIONS.changeWallDoor.FIELDS.restriction.hint', choices: WALL_RESTRICTION_CHOICES }
   ],
   validate(node) {
     if (typeof node.wall !== 'object') throw new Error('changeWallDoor.wall must be a reference object.');
@@ -339,15 +355,23 @@ registerNodeType('triggerBehavior', {
   category: 'scene',
   label: 'GLYPH.ACTIONS.triggerBehavior.label',
   hint: 'GLYPH.ACTIONS.triggerBehavior.hint',
-  fields: [{ name: 'behavior', widget: 'reference', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.behavior.label', required: true }],
+  fields: [
+    { name: 'behavior', widget: 'reference', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.behavior.label', required: true },
+    { name: 'token', widget: 'reference', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.token.label', hint: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.token.hint' },
+    { name: 'allowDisabled', widget: 'boolean', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.allowDisabled.label' },
+    { name: 'mergeResult', widget: 'boolean', label: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.mergeResult.label', hint: 'GLYPH.ACTIONS.triggerBehavior.FIELDS.mergeResult.hint' }
+  ],
   validate(node) {
     if (typeof node.behavior !== 'object') throw new Error('triggerBehavior.behavior must be a reference object.');
   },
   async execute(node, context) {
     const target = resolveReference(node.behavior, context);
     if (!(target instanceof RegionBehavior) || target.type !== MODULE.BEHAVIOR_TYPE) return;
+    if (target.disabled && !node.allowDisabled) return;
     const { name, data, user } = context.info.event;
-    await target.system.run({ name, data, region: target.parent, user });
+    const tokenOverride = node.token ? resolveReference(node.token, context) : null;
+    const result = await target.system.run({ name, data: tokenOverride ? { ...data, token: tokenOverride } : data, region: target.parent, user });
+    if (result && node.mergeResult !== false) context.previous = result.previous;
   }
 });
 
@@ -366,7 +390,8 @@ registerNodeType('teleportToken', {
     },
     { name: 'snap', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.snap.label' },
     { name: 'avoidOccupied', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.avoidOccupied.label' },
-    { name: 'pan', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.pan.label' }
+    { name: 'pan', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.pan.label' },
+    { name: 'keepOrigin', widget: 'boolean', label: 'GLYPH.ACTIONS.teleportToken.FIELDS.keepOrigin.label', hint: 'GLYPH.ACTIONS.teleportToken.FIELDS.keepOrigin.hint' }
   ],
   validate(node) {
     if (typeof node.token !== 'object') throw new Error('teleportToken.token must be a reference object.');
@@ -376,6 +401,10 @@ registerNodeType('teleportToken', {
     const token = resolveReference(node.token, context);
     const destination = resolveReference(node.destination, context);
     if (!(token instanceof TokenDocument) || !(destination instanceof RegionDocument)) return;
+    if (node.keepOrigin && token.parent !== destination.parent) {
+      const { _id, ...tokenData } = token.toObject();
+      await token.parent.createEmbeddedDocuments('Token', [{ ...tokenData, hidden: true }]);
+    }
     await destination.teleportTokens([token], { placement: node.placement ?? 'random', snap: node.snap ?? true, avoidOccupied: node.avoidOccupied ?? true, pan: node.pan });
   }
 });
@@ -411,7 +440,7 @@ registerNodeType('panCanvas', {
   label: 'GLYPH.ACTIONS.panCanvas.label',
   hint: 'GLYPH.ACTIONS.panCanvas.hint',
   fields: [
-    { name: 'location', widget: 'point', label: 'GLYPH.ACTIONS.panCanvas.FIELDS.location.label', required: true },
+    { name: 'location', widget: 'point', label: 'GLYPH.ACTIONS.panCanvas.FIELDS.location.label', hint: 'GLYPH.ACTIONS.FIELDS.worldPoint.hint', required: true },
     { name: 'scale', widget: 'number', min: 0.1, step: 0.1, label: 'GLYPH.ACTIONS.panCanvas.FIELDS.scale.label', hint: 'GLYPH.ACTIONS.panCanvas.FIELDS.scale.hint' },
     AUDIENCE_FIELD
   ],
@@ -429,7 +458,7 @@ registerNodeType('createJournalNote', {
   hint: 'GLYPH.ACTIONS.createJournalNote.hint',
   fields: [
     { name: 'journalUuid', widget: 'uuid', documentType: 'JournalEntry', label: 'GLYPH.ACTIONS.createJournalNote.FIELDS.journalUuid.label', required: true },
-    { name: 'location', widget: 'point', label: 'GLYPH.ACTIONS.createJournalNote.FIELDS.location.label', required: true },
+    { name: 'location', widget: 'point', label: 'GLYPH.ACTIONS.createJournalNote.FIELDS.location.label', hint: 'GLYPH.ACTIONS.FIELDS.worldPoint.hint', required: true },
     { name: 'icon', widget: 'file', filePickerType: 'image', label: 'GLYPH.ACTIONS.createJournalNote.FIELDS.icon.label' }
   ],
   validate(node) {

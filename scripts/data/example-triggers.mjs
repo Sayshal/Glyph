@@ -199,7 +199,7 @@ export const EXAMPLE_TRIGGERS = [
     category: 'token',
     handlerEvent: 'tokenEnter',
     events: ['tokenEnter'],
-    body: { type: 'dnd5eAttack', item: { kind: 'uuid', value: 'Item.PLACEHOLDER' } }
+    body: { type: 'dnd5eAttack', actor: { kind: 'uuid', value: 'Actor.PLACEHOLDER' }, itemId: 'PLACEHOLDER' }
   }),
 
   example({

@@ -5,12 +5,15 @@ import { registerCalendariaActions } from './scripts/actions/calendaria.mjs';
 import { registerDnd5eActions } from './scripts/actions/dnd5e.mjs';
 import { registerDontForgetActions } from './scripts/actions/dont-forget.mjs';
 import { registerHeroMancerActions } from './scripts/actions/hero-mancer.mjs';
+import './scripts/actions/hurt-heal.mjs';
 import { registerIntegrationActions } from './scripts/actions/integrations.mjs';
 import './scripts/actions/messaging.mjs';
 import { registerMindfulEncountersActions } from './scripts/actions/mindful-encounters.mjs';
 import { registerMinstrelActions } from './scripts/actions/minstrel.mjs';
 import { registerPeddlerActions } from './scripts/actions/peddler.mjs';
+import { registerPf2eActions } from './scripts/actions/pf2e.mjs';
 import './scripts/actions/scene.mjs';
+import './scripts/actions/skill-test.mjs';
 import { registerSpellBookActions } from './scripts/actions/spell-book.mjs';
 import { registerTenacityActions } from './scripts/actions/tenacity.mjs';
 import './scripts/actions/tile.mjs';
@@ -31,14 +34,18 @@ import { registerPseudoEvents } from './scripts/pseudo-events.mjs';
 import { registerQuickCreate } from './scripts/quick-create.mjs';
 import { registerRecipesButton } from './scripts/recipes.mjs';
 import { registerReferenceRemap } from './scripts/reference-remap.mjs';
-import { registerSettings } from './scripts/settings.mjs';
 import { registerTileLink } from './scripts/tile-link.mjs';
 import { registerTriggerLinkEnricher } from './scripts/trigger-link-enricher.mjs';
 import './styles/glyph.css';
 
 Hooks.once('init', () => {
-  ATLAS.register(MODULE.ID, { title: MODULE.NAME, github: 'Sayshal/glyph', theme: { scope: '.glyph' } });
-  registerSettings();
+  ATLAS.register(MODULE.ID, { title: MODULE.NAME, github: 'Sayshal/glyph', theme: { scope: '.glyph', default: 'arcane' } });
+  foundry.applications.handlebars.loadTemplates([
+    `${MODULE.TEMPLATES}/partials/tree-node.hbs`,
+    `${MODULE.TEMPLATES}/partials/tree-widget.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-value-context.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-value-uuid.hbs`
+  ]);
   registerTriggerBehavior();
   registerTriggerSheet();
   registerPseudoEvents();
@@ -49,6 +56,7 @@ Hooks.once('init', () => {
   registerQuickCreate();
   registerTriggerLinkEnricher();
   registerDnd5eActions();
+  registerPf2eActions();
   registerIntegrationActions();
   registerTenacityActions();
   registerPeddlerActions();

@@ -21,7 +21,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
-            tokenEnter: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }, { type: 'playSound', path: 'sounds/teleport.ogg', loop: false, volume: 0.8, channel: 'environment' })
+            tokenEnter: { type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }
           }
         })
       }
@@ -32,13 +32,7 @@ export const RECIPES = [
     name: 'GLYPH.RECIPES.stairway.name',
     hint: 'GLYPH.RECIPES.stairway.hint',
     category: 'movement',
-    behaviors: [
-      { type: 'changeLevel', system: {} },
-      {
-        type: MODULE.BEHAVIOR_TYPE,
-        system: buildTriggerSystem({ events: ['tokenEnter'], handlers: { tokenEnter: { type: 'playSound', path: 'sounds/footsteps-stairs.ogg', loop: false, volume: 0.6, channel: 'environment' } } })
-      }
-    ]
+    behaviors: [{ type: 'changeLevel', system: {} }]
   },
 
   {
@@ -52,7 +46,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter', 'tokenExit'],
           handlers: {
-            tokenEnter: seq({ type: 'toggleTileVisibility', tile: TILE_REF, hidden: false }, { type: 'playSound', path: 'sounds/lever.ogg', loop: false, volume: 0.8, channel: 'environment' }),
+            tokenEnter: { type: 'toggleTileVisibility', tile: TILE_REF, hidden: false },
             tokenExit: { type: 'toggleTileVisibility', tile: TILE_REF, hidden: true }
           }
         })
@@ -64,13 +58,7 @@ export const RECIPES = [
     name: 'GLYPH.RECIPES.motionLight.name',
     hint: 'GLYPH.RECIPES.motionLight.hint',
     category: 'lighting',
-    behaviors: [
-      { type: 'adjustDarknessLevel', system: { mode: 1, modifier: 0.5 } },
-      {
-        type: MODULE.BEHAVIOR_TYPE,
-        system: buildTriggerSystem({ events: ['tokenEnter'], handlers: { tokenEnter: { type: 'playSound', path: 'sounds/light-click.ogg', loop: false, volume: 0.5, channel: 'environment' } } })
-      }
-    ]
+    behaviors: [{ type: 'adjustDarknessLevel', system: { mode: 1, modifier: 0.5 } }]
   },
 
   {
@@ -84,11 +72,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
-            tokenEnter: seq(
-              { type: 'toggleCondition', actor: ACTOR, statusId: 'prone', active: true },
-              { type: 'chatMessage', text: 'A trap springs on {{event.data.token.name}}!' },
-              { type: 'playSound', path: 'sounds/trap.ogg', loop: false, volume: 0.8, channel: 'environment' }
-            )
+            tokenEnter: seq({ type: 'toggleCondition', actor: ACTOR, statusId: 'prone', active: true }, { type: 'chatMessage', text: 'A trap springs on {{token.name}}!' })
           }
         })
       }
@@ -105,11 +89,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
-            tokenEnter: seq(
-              { type: 'toggleCondition', actor: ACTOR, statusId: 'poisoned', active: true },
-              { type: 'chatMessage', text: 'A cloud of poison gas engulfs {{event.data.token.name}}!' },
-              { type: 'playSound', path: 'sounds/gas-hiss.ogg', loop: false, volume: 0.7, channel: 'environment' }
-            )
+            tokenEnter: seq({ type: 'toggleCondition', actor: ACTOR, statusId: 'poisoned', active: true }, { type: 'chatMessage', text: 'A cloud of poison gas engulfs {{token.name}}!' })
           }
         })
       }
@@ -128,8 +108,7 @@ export const RECIPES = [
           handlers: {
             tokenEnter: seq(
               { type: 'forEach', collection: 'within', body: [{ type: 'toggleCondition', actor: ITEM_ACTOR, statusId: 'prone', active: true }] },
-              { type: 'chatMessage', text: 'A pressure plate trips - everyone standing here stumbles!' },
-              { type: 'playSound', path: 'sounds/click-trap.ogg', loop: false, volume: 0.7, channel: 'environment' }
+              { type: 'chatMessage', text: 'A pressure plate trips - everyone standing here stumbles!' }
             )
           }
         })
@@ -147,11 +126,62 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
+            tokenEnter: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'alert' }, { type: 'notification', text: 'An alarm sounds!', level: 'warn', audience: 'everyone' })
+          }
+        })
+      }
+    ]
+  },
+  {
+    id: 'fireTrap',
+    name: 'GLYPH.RECIPES.fireTrap.name',
+    hint: 'GLYPH.RECIPES.fireTrap.hint',
+    category: 'hazard',
+    behaviors: [
+      {
+        type: MODULE.BEHAVIOR_TYPE,
+        system: buildTriggerSystem({
+          events: ['tokenEnter'],
+          handlers: {
+            tokenEnter: seq({ type: 'hurtHeal', actor: ACTOR, value: '2d6', damageType: 'fire', chatCard: true }, { type: 'chatMessage', text: '{{token.name}} is engulfed in a burst of flame!' })
+          }
+        })
+      }
+    ]
+  },
+  {
+    id: 'pitTrap',
+    name: 'GLYPH.RECIPES.pitTrap.name',
+    hint: 'GLYPH.RECIPES.pitTrap.hint',
+    category: 'hazard',
+    behaviors: [
+      {
+        type: MODULE.BEHAVIOR_TYPE,
+        system: buildTriggerSystem({
+          events: ['tokenEnter'],
+          handlers: {
             tokenEnter: seq(
-              { type: 'pingLocation', location: { x: 0, y: 0 }, style: 'alert' },
-              { type: 'notification', text: 'An alarm sounds!', level: 'warn', audience: 'everyone' },
-              { type: 'playSound', path: 'sounds/alarm-bell.ogg', loop: false, volume: 0.9, channel: 'environment' }
+              { type: 'hurtHeal', actor: ACTOR, value: '1d6', damageType: 'bludgeoning', chatCard: true },
+              { type: 'toggleCondition', actor: ACTOR, statusId: 'prone', active: true },
+              { type: 'chatMessage', text: '{{token.name}} falls into a hidden pit!' }
             )
+          }
+        })
+      }
+    ]
+  },
+  {
+    id: 'spikeTrap',
+    name: 'GLYPH.RECIPES.spikeTrap.name',
+    hint: 'GLYPH.RECIPES.spikeTrap.hint',
+    category: 'hazard',
+    behaviors: [
+      {
+        type: MODULE.BEHAVIOR_TYPE,
+        system: buildTriggerSystem({
+          events: ['tokenEnter'],
+          handlers: {
+            tokenEnter: seq({ type: 'hurtHeal', actor: ACTOR, value: '1d8', damageType: 'piercing', chatCard: true }, { type: 'chatMessage', text: 'Hidden spikes spring up under {{token.name}}!' })
           }
         })
       }
@@ -185,7 +215,7 @@ export const RECIPES = [
         type: MODULE.BEHAVIOR_TYPE,
         system: buildTriggerSystem({
           events: ['tokenEnter'],
-          handlers: { tokenEnter: seq({ type: 'chatMessage', text: '{{event.data.token.name}} settles in to rest.' }, { type: 'setGameTime', seconds: 28800 }) }
+          handlers: { tokenEnter: seq({ type: 'chatMessage', text: '{{token.name}} settles in to rest.' }, { type: 'setGameTime', seconds: 28800 }) }
         })
       }
     ]
@@ -201,10 +231,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenTurnStart'],
           handlers: {
-            tokenTurnStart: seq(
-              { type: 'notification', text: 'Danger stirs nearby...', level: 'warn', audience: 'triggeringUser' },
-              { type: 'playSound', path: 'sounds/tension-sting.ogg', loop: false, volume: 0.6, channel: 'environment' }
-            )
+            tokenTurnStart: { type: 'notification', text: 'Danger stirs nearby...', level: 'warn', audience: 'triggeringUser' }
           }
         })
       }
@@ -276,7 +303,7 @@ export const RECIPES = [
         type: MODULE.BEHAVIOR_TYPE,
         system: buildTriggerSystem({
           events: ['tokenEnter'],
-          handlers: { tokenEnter: seq({ type: 'alterTag', entity: TOKEN, tag: 'marked', state: 'add' }, { type: 'chatMessage', text: '{{event.data.token.name}} has been marked.' }) }
+          handlers: { tokenEnter: seq({ type: 'alterTag', entity: TOKEN, tag: 'marked', state: 'add' }, { type: 'chatMessage', text: '{{token.name}} has been marked.' }) }
         })
       }
     ]
@@ -303,8 +330,8 @@ export const RECIPES = [
               ],
               audience: 'triggeringUser'
             },
-            goLeft: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }, { type: 'chatMessage', text: '{{event.data.token.name}} heads left.' }),
-            goRight: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }, { type: 'chatMessage', text: '{{event.data.token.name}} heads right.' })
+            goLeft: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }, { type: 'chatMessage', text: '{{token.name}} heads left.' }),
+            goRight: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }, { type: 'chatMessage', text: '{{token.name}} heads right.' })
           }
         })
       }
@@ -351,7 +378,7 @@ export const RECIPES = [
           handlers: {
             tokenEnter: {
               type: 'if',
-              condition: 'attribute({{event.data.token}}, "elevation") > 0',
+              condition: 'attribute({{token}}, "elevation") > 0',
               then: [{ type: 'alter', target: TOKEN, path: 'elevation', value: 0 }],
               else: [{ type: 'alter', target: TOKEN, path: 'elevation', value: 10 }]
             }

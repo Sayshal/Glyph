@@ -8,8 +8,6 @@ import { MODULE } from './constants.mjs';
  */
 export async function runTrigger(behaviorUuid, handler = 'manual') {
   const behavior = await fromUuid(behaviorUuid);
-  if (!(behavior instanceof RegionBehavior) || behavior.type !== MODULE.BEHAVIOR_TYPE) {
-    throw new Error(`Glyph: "${behaviorUuid}" is not a glyph.trigger RegionBehavior.`);
-  }
+  if (!(behavior instanceof RegionBehavior) || behavior.type !== MODULE.BEHAVIOR_TYPE) throw new Error(`Glyph: "${behaviorUuid}" is not a glyph.trigger RegionBehavior.`);
   await behavior.system.run({ name: handler, data: {}, region: behavior.parent, user: game.user });
 }

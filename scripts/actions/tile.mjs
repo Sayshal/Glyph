@@ -1,7 +1,7 @@
 import { sendToAudience } from '../audience.mjs';
 import { MODULE } from '../constants.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { registerRenderIntent } from '../render-intent.mjs';
+import { registerRenderIntent } from '../queries.mjs';
 import { resolveReference } from '../targeting.mjs';
 import { applyTileTransition } from '../tile-transitions.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
@@ -69,9 +69,9 @@ registerNodeType('changeTileImage', {
         index: 'GLYPH.IMAGE_SELECT.index'
       }
     },
-    { name: 'src', widget: 'file', filePickerType: 'image', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.src.label' },
+    { name: 'src', widget: 'file', filePickerType: 'image', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.src.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.src.hint' },
     { name: 'images', widget: 'json', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.images.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.images.hint' },
-    { name: 'index', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.index.label' },
+    { name: 'index', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.index.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.index.hint' },
     { name: 'randomRange', widget: 'text', label: 'GLYPH.ACTIONS.changeTileImage.FIELDS.randomRange.label', hint: 'GLYPH.ACTIONS.changeTileImage.FIELDS.randomRange.hint' },
     {
       name: 'transition',
@@ -111,6 +111,19 @@ registerNodeType('changeTileImage', {
     }
     if (!src) return;
     await applyTileTransition(tile, src, node.transition ?? 'none', node.duration ?? 500);
+  }
+});
+
+registerNodeType('preloadTileImages', {
+  category: 'tile',
+  label: 'GLYPH.ACTIONS.preloadTileImages.label',
+  hint: 'GLYPH.ACTIONS.preloadTileImages.hint',
+  fields: [{ name: 'images', widget: 'json', label: 'GLYPH.ACTIONS.preloadTileImages.FIELDS.images.label', hint: 'GLYPH.ACTIONS.preloadTileImages.FIELDS.images.hint', required: true }],
+  validate(node) {
+    if (!Array.isArray(node.images) || !node.images.length) throw new Error('preloadTileImages.images must be a non-empty array.');
+  },
+  async execute(node) {
+    await Promise.all(node.images.filter((path) => typeof path === 'string' && path).map((path) => foundry.canvas.loadTexture(path)));
   }
 });
 

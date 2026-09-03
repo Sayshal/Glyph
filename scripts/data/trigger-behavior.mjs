@@ -3,15 +3,33 @@ import { checkGates, recordFailure } from '../gates.mjs';
 import { runNode } from '../nodes/executor.mjs';
 import { ProgramField } from '../nodes/program-field.mjs';
 import '../nodes/types.mjs';
-import { registerRenderIntent, sendRenderIntent } from '../render-intent.mjs';
+import { registerRenderIntent, sendRenderIntent } from '../queries.mjs';
 import { createRunContext } from '../run-context.mjs';
-import { normalizeRunSource } from '../run-source.mjs';
-import { createReferenceField } from './reference-field.mjs';
 
 registerRenderIntent('triggerFailed', ({ region, error }) => ui.notifications.error('GLYPH.NOTIFICATIONS.TriggerFailed', { format: { region, error } }));
 
-/** @type {Set<string>} Behavior UUIDs with a run currently in flight, so a `wait` node holding one open can't overlap with a second trigger on the same behavior. */
-const activeRuns = new Set();
+/**
+ * Glyph's canonical run source.
+ * @typedef {object} RunSource
+ * @property {RegionDocument} region The Region the trigger fired on.
+ * @property {Scene} scene The Scene containing that Region.
+ * @property {object} event The triggering event.
+ * @property {string} event.name The `CONST.REGION_EVENTS` name.
+ * @property {object} event.data Event-specific payload.
+ * @property {User} event.user The User that triggered the event.
+ */
+
+/**
+ * Normalize a core RegionEvent into a RunSource.
+ * @param {object} regionEvent A core RegionEvent.
+ * @returns {RunSource} The normalized run source.
+ */
+function normalizeRunSource({ name, data, region, user }) {
+  return { region, scene: region.parent, event: { name, data, user } };
+}
+
+/** @type {Map<string, Promise>} Per-behavior promise chain tail, so overlapping triggers on the same behavior queue and run in order (rather than one silently dropping) - keeps a `wait` node from overlapping a second trigger too. */
+const runQueues = new Map();
 
 /** The RegionBehaviorType glyph registers as `glyph.trigger`. */
 export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.RegionBehaviorType {
@@ -67,7 +85,14 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
       pertoken: new fields.BooleanField({ initial: false }),
       vision: new fields.BooleanField({ initial: false }),
       allowPaused: new fields.BooleanField({ initial: false }),
-      linkedTile: createReferenceField({ required: false, nullable: true, initial: null }),
+      linkedTile: new fields.SchemaField(
+        {
+          kind: new fields.StringField({ required: true, blank: false, choices: ['uuid', 'tag', 'context'] }),
+          value: new fields.StringField({ required: true, blank: false }),
+          scope: new fields.StringField({ required: false, blank: true })
+        },
+        { required: false, nullable: true, initial: null }
+      ),
       handlers: new ProgramField({ required: true, initial: {} })
     };
   }
@@ -85,34 +110,43 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
   /**
    * Run this behavior's handler for `event`, gating first.
    * @param {object} event A core RegionEvent or a pseudo-event.
-   * @returns {Promise<void>}
+   * @returns {Promise<import('../run-context.mjs').RunContext|null>} The finished run's context, or null if it didn't run.
    */
   async run(event) {
     const source = normalizeRunSource(event);
     const handler = this.handlers[source.event.name];
     if (!handler) {
       ATLAS.log(2, `Glyph: "${source.event.name}" fired on Region "${source.region.name}" with no handler configured.`);
-      return;
+      return null;
     }
-    if (!(await checkGates(this.parent, source.event))) return;
-    if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, this.parent, source.event) === false) return;
     const uuid = this.parent.uuid;
-    if (activeRuns.has(uuid)) {
-      ATLAS.log(3, `Glyph: "${source.event.name}" on Region "${source.region.name}" skipped - a run is already in progress.`);
-      return;
-    }
-    activeRuns.add(uuid);
+    const tail = (runQueues.get(uuid) ?? Promise.resolve()).then(() => this.#runQueued(source, handler)).catch(() => null);
+    runQueues.set(uuid, tail);
+    const result = await tail;
+    if (runQueues.get(uuid) === tail) runQueues.delete(uuid);
+    return result;
+  }
+
+  /**
+   * Gate and execute one already-queued trigger.
+   * @param {RunSource} source The normalized run source.
+   * @param {object} handler The handler tree to run.
+   * @returns {Promise<import('../run-context.mjs').RunContext|null>} The finished run's context, or null if it didn't run.
+   */
+  async #runQueued(source, handler) {
+    if (!(await checkGates(this.parent, source.event))) return null;
+    if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, this.parent, source.event) === false) return null;
+    const context = createRunContext(source, this.parent);
     try {
-      await runNode(handler, createRunContext(source, this.parent));
+      await runNode(handler, context);
     } catch (error) {
       ATLAS.log(1, `Glyph: Trigger "${source.event.name}" on Region "${source.region.name}" failed.`, error);
       await recordFailure(this.parent, source.event, error);
       await sendRenderIntent(source.event.user, 'triggerFailed', { region: source.region.name, error: error.message });
-      return;
-    } finally {
-      activeRuns.delete(uuid);
+      return null;
     }
     Hooks.callAll(MODULE.HOOKS.TRIGGER, this.parent, source.event);
+    return context;
   }
 }
 

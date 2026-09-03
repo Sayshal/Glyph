@@ -2,8 +2,9 @@ import { MODULE } from '../constants.mjs';
 import { buildTriggerSystem } from '../data/trigger-system.mjs';
 import { validateNode } from '../nodes/types.mjs';
 import { regionShapeFromTile } from '../tile-link.mjs';
-import { ACTION_MAP, FILTER_MAP } from './matt-action-map.mjs';
+import { ACTION_MAP, FILTER_MAP, audienceFromShowto } from './matt-action-map.mjs';
 import { MODE_MAP } from './matt-modes.mjs';
+import { idOf } from './matt-sentinels.mjs';
 
 /** @type {Record<string, string>} MATT per-tile flags with a same-shape glyph field (MATT-teardown.md §2.2). */
 const FIELD_MAP = { restriction: 'restriction', chance: 'chance', minrequired: 'minRequired', cooldown: 'cooldown', pertoken: 'pertoken', vision: 'vision', allowpaused: 'allowPaused' };
@@ -32,7 +33,7 @@ function hasMattTemplate(data) {
 /**
  * Convert one MATT action-list entry into a glyph program node, or a manual-review stub.
  * @param {{action: string, data: object}} entry One entry of MATT's flat `actions[]`.
- * @param {{report: object[], stubs: object[]}} out Accumulators this call appends to.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
  * @param {object} matt The tile's whole `flags.monks-active-tiles` object, for converters needing tile-level data.
  * @returns {object} A glyph program node (real, or a `__mattManualStub` placeholder).
  */
@@ -48,7 +49,7 @@ function convertAction(entry, out, matt) {
     return stub(entry, out);
   }
   try {
-    const node = mapping.convert(entry.data ?? {}, matt);
+    const node = mapping.convert(entry.data ?? {}, matt, out);
     validateNode(node);
     const template = hasMattTemplate(entry.data);
     const partial = mapping.partial ?? (template ? "Text contains MATT's own {{value...}} template placeholders, which don't resolve against glyph's context - rewrite them by hand." : null);
@@ -61,8 +62,7 @@ function convertAction(entry, out, matt) {
 }
 
 /**
- * Convert a flat MATT action list into glyph program nodes, wrapping the remainder of the chain in
- * an `if` node wherever a `FILTER_MAP`-eligible filter gates it.
+ * Convert a flat MATT action list into glyph program nodes.
  * @param {{action: string, data: object}[]} actions MATT's flat `actions[]`, or a suffix of it.
  * @param {{report: object[], stubs: object[]}} out Accumulators this call appends to.
  * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
@@ -71,22 +71,257 @@ function convertAction(entry, out, matt) {
 function convertActions(actions, out, matt) {
   for (let i = 0; i < actions.length; i++) {
     const entry = actions[i];
-    const filter = FILTER_MAP[entry.action];
-    if (filter && !filter.failLanding(entry.data ?? {})) {
-      const condition = filter.expression(entry.data ?? {});
-      if (condition) {
-        out.report.push({
-          level: 'partial',
-          matt: entry,
-          note: "Converted to an `if` gate wrapping the rest of this chain, using glyph's matching expression function (Stage 14) - review the condition for correctness."
-        });
-        const before = actions.slice(0, i).map((e) => convertAction(e, out, matt));
-        const rest = convertActions(actions.slice(i + 1), out, matt);
-        return [...before, { type: 'if', condition, then: rest }];
-      }
+    if (entry.action === 'first') {
+      const node = buildFirstNode(entry, actions.slice(i + 1), out, matt);
+      if (node) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), node];
     }
+    if (entry.action === 'setcurrent') {
+      const built = buildSetCurrentAbsorption(entry, actions.slice(i + 1), out, matt);
+      if (built) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), built.node, ...built.rest];
+    }
+    if (entry.action === 'loop') {
+      const built = buildLoopNode(entry, i, actions, out, matt);
+      if (built) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), built.node, ...built.rest];
+    }
+    if (entry.action === 'dialog') {
+      const node = buildDialogNode(entry, i, actions, out, matt);
+      if (node) return [...actions.slice(0, i).map((e) => convertAction(e, out, matt)), node];
+    }
+    const filter = FILTER_MAP[entry.action];
+    if (!filter) continue;
+    const condition = filter.expression(entry.data ?? {});
+    if (!condition) continue;
+    out.report.push({
+      level: 'partial',
+      matt: entry,
+      note: "Converted to an `if` gate using glyph's matching expression function - review the condition."
+    });
+    const before = actions.slice(0, i).map((e) => convertAction(e, out, matt));
+    const rest = convertActions(actions.slice(i + 1), out, matt);
+    const failTag = filter.failLanding(entry.data ?? {});
+    if (failTag) return [...before, { type: 'if', condition, then: [], else: [{ type: 'goto', tag: failTag }] }, ...rest];
+    return [...before, { type: 'if', condition, then: rest }];
   }
   return actions.map((entry) => convertAction(entry, out, matt));
+}
+
+/**
+ * Resolve a MATT `first` filter's `entity` to a glyph collection resolver id.
+ * @param {*} entity The raw MATT `entity` value.
+ * @returns {string|null} A `resolveCollection`-compatible id, or null if unbuildable.
+ */
+function tokenCollectionFromEntity(entity) {
+  const id = idOf(entity);
+  if (id === 'within' || id === 'players') return id;
+  if (id?.startsWith('tagger')) return `tag:${id.slice(7)}`;
+  return null;
+}
+
+/**
+ * Resolve a MATT `first` filter's free-text `position` field to a `forEach` pick mode.
+ * @param {*} position The raw MATT `position` value.
+ * @returns {{pick: string, pickIndex?: number}|null} The `forEach` pick fields, or null if unrecognized.
+ */
+function pickFromPosition(position) {
+  const pos = String(position ?? 'first').trim();
+  if (pos === 'first' || pos === 'last' || pos === 'random') return { pick: pos };
+  if (pos === 'min') return { pick: 'minName' };
+  if (pos === 'max') return { pick: 'maxName' };
+  const n = Number(pos);
+  return Number.isInteger(n) && n >= 1 ? { pick: 'index', pickIndex: n - 1 } : null;
+}
+
+/**
+ * Rewrite every `previous`/`current` reference (object or string-embedded `{{previous}}`) in a program tree to `item`.
+ * @param {*} node A program node, reference object, string, or other plain value.
+ * @returns {*} The same value, with matching references rewritten in place.
+ */
+function rewritePreviousToItem(node) {
+  if (typeof node === 'string') return node.includes('{{previous}}') ? node.replaceAll('{{previous}}', '{{item}}') : node;
+  if (!node || typeof node !== 'object') return node;
+  if (node.kind === 'context' && node.value === 'previous') return { kind: 'context', value: 'item' };
+  for (const [key, value] of Object.entries(node)) {
+    if (Array.isArray(value)) node[key] = value.map(rewritePreviousToItem);
+    else node[key] = rewritePreviousToItem(value);
+  }
+  return node;
+}
+
+/**
+ * Build a `forEach` node for a MATT `first` filter with an explicit, statically-resolvable `entity`.
+ * @param {{action: string, data: object}} entry The MATT `first` action.
+ * @param {{action: string, data: object}[]} restEntries The remaining MATT actions in this chain.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {object|null} A `forEach` program node, or null.
+ */
+function buildFirstNode(entry, restEntries, out, matt) {
+  const data = entry.data ?? {};
+  const collection = tokenCollectionFromEntity(data.entity);
+  if (!collection) return null;
+  const pickInfo = pickFromPosition(data.position);
+  if (!pickInfo) return null;
+  out.report.push({ level: 'ok', matt: entry });
+  const body = convertActions(restEntries, out, matt).map(rewritePreviousToItem);
+  return { type: 'forEach', collection, ...pickInfo, body };
+}
+
+/** @type {Set<string>} MATT action ids whose `entity` defaults to the shared "current tokens" selection - plain actions only, no filters. */
+const TOKEN_BAG_ACTIONS = new Set([
+  'teleport',
+  'rotation',
+  'showhide',
+  'alter',
+  'hurtheal',
+  'chatmessage',
+  'activeeffect',
+  'additem',
+  'removeitem',
+  'addtocombat',
+  'elevation',
+  'loop',
+  'target',
+  'scrollingtext',
+  'movetoken'
+]);
+
+/**
+ * Build a `forEach` node for a MATT `setcurrent` action, wrapping the contiguous run of immediately-following plain actions that consume the same selection.
+ * @param {{action: string, data: object}} entry The MATT `setcurrent` action.
+ * @param {{action: string, data: object}[]} restEntries The remaining MATT actions in this chain.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {{node: object, rest: object[]}|null} The `forEach` node plus the unabsorbed remainder, or null.
+ */
+function buildSetCurrentAbsorption(entry, restEntries, out, matt) {
+  const data = entry.data ?? {};
+  if ((data.action ?? 'add') !== 'replace' || data.owners) return null;
+  const id = idOf(data.entity);
+  const collection = id === 'within' || id === 'players' ? id : null;
+  if (!collection) return null;
+  let count = 0;
+  while (count < restEntries.length && TOKEN_BAG_ACTIONS.has(restEntries[count].action)) count++;
+  if (count === 0) return null;
+  out.report.push({ level: 'ok', matt: entry });
+  const body = convertActions(restEntries.slice(0, count), out, matt).map(rewritePreviousToItem);
+  const rest = convertActions(restEntries.slice(count), out, matt);
+  return { node: { type: 'forEach', collection, body }, rest };
+}
+
+/**
+ * Resolve a MATT `loop` action's `entity` to a glyph collection resolver id.
+ * @param {*} entity The raw MATT `entity` value.
+ * @returns {string|null} A `resolveCollection`-compatible id, or null if unbuildable.
+ */
+function loopCollectionFromEntity(entity) {
+  const id = idOf(entity);
+  if (id === 'within' || id === 'players' || id === 'users') return id;
+  if (id?.startsWith('tagger')) return `tag:${id.slice(7)}`;
+  return null;
+}
+
+/**
+ * Build a `forEach` node for a MATT `loop` action, delimiting its body by the stop-before-resume authoring convention.
+ * @param {{action: string, data: object}} entry The MATT `loop` action.
+ * @param {number} index `entry`'s index in `actions`.
+ * @param {{action: string, data: object}[]} actions The tile's whole flat MATT action list.
+ * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {{node: object, rest: object[]}|null} The `forEach` node plus the unabsorbed remainder, or null.
+ */
+function buildLoopNode(entry, index, actions, out, matt) {
+  const data = entry.data ?? {};
+  const collection = loopCollectionFromEntity(data.entity);
+  if (!collection || !data.tag) return null;
+  const anchor = actions[index + 1];
+  if (!anchor || anchor.action !== 'anchor' || anchor.data?.tag !== data.tag) return null;
+
+  let bodyEnd = index + 2;
+  let endedByResumeAnchor = false;
+  while (bodyEnd < actions.length) {
+    const a = actions[bodyEnd];
+    if (a.action === 'stop' || a.action === 'stoptriggers') break;
+    if (data.resume && a.action === 'anchor' && a.data?.tag === data.resume) {
+      endedByResumeAnchor = true;
+      break;
+    }
+    bodyEnd++;
+  }
+
+  let resumeIdx = -1;
+  if (data.resume) resumeIdx = endedByResumeAnchor ? bodyEnd : actions.findIndex((a, i) => i > bodyEnd && a.action === 'anchor' && a.data?.tag === data.resume);
+  if (data.resume && resumeIdx === -1) {
+    out.report.push({ level: 'skipped', matt: entry, note: 'The Resume landing was never found - nothing after this loop runs.' });
+  } else if (!endedByResumeAnchor && resumeIdx > bodyEnd + 1) {
+    out.report.push({ level: 'skipped', matt: { actions: actions.slice(bodyEnd + 1, resumeIdx) }, note: 'Dropped as unreachable between Stop and Resume.' });
+  }
+
+  out.report.push({
+    level: 'partial',
+    matt: entry,
+    note: 'Converted to a For Each - assumes the tile follows the stop-before-resume convention.'
+  });
+  const body = convertActions(actions.slice(index + 2, bodyEnd), out, matt).map(rewritePreviousToItem);
+  const rest = resumeIdx === -1 ? [] : convertActions(actions.slice(resumeIdx + 1), out, matt);
+  return { node: { type: 'forEach', collection, body }, rest };
+}
+
+/**
+ * Build a `showDialog` node for a MATT `dialog` action, synthesizing an extra named handler per distinct button target.
+ * @param {{action: string, data: object}} entry The MATT `dialog` action.
+ * @param {number} index `entry`'s index in `actions`.
+ * @param {{action: string, data: object}[]} actions The tile's whole flat MATT action list.
+ * @param {{report: object[], stubs: object[], destinations: object[], extraHandlers: Record<string, object>}} out Accumulators this call appends to.
+ * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
+ * @returns {object|null} A `showDialog` program node, or null.
+ */
+function buildDialogNode(entry, index, actions, out, matt) {
+  const data = entry.data ?? {};
+  if (data.file) return null;
+  const dialogType = data.dialogtype ?? 'confirm';
+  let buttonSpecs;
+  if (dialogType === 'confirm')
+    buttonSpecs = [
+      { label: 'Yes', goto: data.yes },
+      { label: 'No', goto: data.no }
+    ];
+  else if (dialogType === 'alert') buttonSpecs = [{ label: 'OK', goto: undefined }];
+  else if (dialogType === 'custom' && Array.isArray(data.buttons) && data.buttons.length) {
+    buttonSpecs = data.buttons.map((b) => ({ label: b.name ?? b.label ?? 'OK', goto: b.goto }));
+  } else return null;
+
+  const handlerByTag = new Map();
+  const handlerFor = (tag) => {
+    const key = tag || '';
+    if (handlerByTag.has(key)) return handlerByTag.get(key);
+    let bodyStart;
+    if (!tag) bodyStart = index + 1;
+    else {
+      const anchorIdx = actions.findIndex((a) => a.action === 'anchor' && a.data?.tag === tag);
+      if (anchorIdx === -1) return null;
+      bodyStart = anchorIdx + 1;
+    }
+    const name = `__mattDialog_${foundry.utils.randomID()}`;
+    out.extraHandlers[name] = { type: 'sequence', children: convertActions(actions.slice(bodyStart), out, matt) };
+    handlerByTag.set(key, name);
+    return name;
+  };
+
+  const buttons = [];
+  for (const spec of buttonSpecs) {
+    const handler = handlerFor(spec.goto);
+    if (!handler) return null;
+    buttons.push({ label: spec.label, handler });
+  }
+  const closeHandler = data.close ? (handlerFor(data.close) ?? undefined) : undefined;
+
+  const template = hasMattTemplate(data);
+  out.report.push(
+    template
+      ? { level: 'partial', matt: entry, note: "Text contains MATT's own {{value...}} template placeholders, which don't resolve against glyph's context - rewrite them by hand." }
+      : { level: 'ok', matt: entry }
+  );
+  return { type: 'showDialog', title: data.title || '', content: data.content || '', buttons, closeHandler, audience: audienceFromShowto(data.showto) };
 }
 
 /**
@@ -115,16 +350,74 @@ export function resolveStubs(node, macroUuidByStubId) {
 }
 
 /**
+ * Replace every pending-Region teleport destination in a program tree with the real Region reference created for it.
+ * @param {object} node A program node (recurses through `children`/`then`/`else`/`body`).
+ * @param {Record<string, object>} regionRefByDestId Destination id -> resolved `{kind: 'uuid', value}` reference.
+ * @returns {object} The same node, with pending destinations resolved in place.
+ */
+export function resolveDestinations(node, regionRefByDestId) {
+  if (!node || typeof node !== 'object') return node;
+  if (node.type === 'teleportToken' && node.destination?.kind === '__pendingRegion') node.destination = regionRefByDestId[node.destination.value] ?? null;
+  for (const key of ['children', 'then', 'else', 'body']) if (Array.isArray(node[key])) node[key] = node[key].map((child) => resolveDestinations(child, regionRefByDestId));
+  return node;
+}
+
+/**
+ * Replace every pending `trigger` target in a program tree with the real Behavior UUID created for that Tile.
+ * @param {object} node A program node (recurses through `children`/`then`/`else`/`body`).
+ * @param {Record<string, string>} behaviorUuidByTileUuid Tile UUID -> its converted Behavior UUID.
+ * @returns {object} The same node, with pending behaviors resolved in place.
+ */
+export function resolvePendingBehaviors(node, behaviorUuidByTileUuid) {
+  if (!node || typeof node !== 'object') return node;
+  if (node.type === 'triggerBehavior' && node.behavior?.kind === '__pendingBehavior') {
+    const uuid = behaviorUuidByTileUuid[node.behavior.value];
+    node.behavior = uuid ? { kind: 'uuid', value: uuid } : null;
+  }
+  for (const key of ['children', 'then', 'else', 'body']) if (Array.isArray(node[key])) node[key] = node[key].map((child) => resolvePendingBehaviors(child, behaviorUuidByTileUuid));
+  return node;
+}
+
+/**
+ * Create the auto-generated destination Region for one queued teleport target.
+ * @param {{uuid?: string, point?: {x: number, y: number, sceneId: string|null}}} destination A queued destination descriptor.
+ * @param {Scene} fallbackScene The scene a sceneless raw-point destination falls back to.
+ * @returns {Promise<{scene: Scene, ref: {kind: 'uuid', value: string}}|null>} The created Region's scene and reference, or null if unresolvable.
+ */
+async function createTeleportDestinationRegion(destination, fallbackScene) {
+  let targetScene, shape;
+  if (destination.uuid) {
+    const target = await fromUuid(destination.uuid);
+    if (target instanceof TileDocument) {
+      targetScene = target.parent;
+      shape = regionShapeFromTile(target);
+    } else if (target instanceof Scene) {
+      targetScene = target;
+      shape = { type: 'rectangle', x: 0, y: 0, width: target.dimensions.width, height: target.dimensions.height };
+    }
+  } else if (destination.point) {
+    targetScene = destination.point.sceneId ? game.scenes.get(destination.point.sceneId) : fallbackScene;
+    const size = targetScene?.dimensions.size ?? 100;
+    shape = { type: 'rectangle', x: destination.point.x - size / 2, y: destination.point.y - size / 2, width: size, height: size };
+  }
+  if (!targetScene || !shape) return null;
+  const [region] = await targetScene.createEmbeddedDocuments('Region', [{ name: 'Teleport Destination', shapes: [shape] }]);
+  return { scene: targetScene, ref: { kind: 'uuid', value: region.uuid } };
+}
+
+/**
  * Convert one MATT-flagged Tile into glyph shape, dry-run.
  * @param {TileDocument} tile A Tile carrying `flags.monks-active-tiles`.
- * @returns {{regionShape: object, linkedTile: object|null, disabled: boolean, system: object, report: object[], stubs: object[]}} The converted result.
+ * @returns {{regionShape: object, linkedTile: object|null, disabled: boolean, system: object, report: object[], stubs: object[], destinations: object[]}} The converted result.
  */
 export function convertTile(tile) {
   const matt = tile.flags?.['monks-active-tiles'];
   const report = [];
   const stubs = [];
-  if (!matt) return { regionShape: regionShapeFromTile(tile), linkedTile: null, disabled: true, system: buildTriggerSystem({ handlers: {} }), report, stubs };
-
+  const destinations = [];
+  if (!matt) {
+    return { regionShape: regionShapeFromTile(tile), linkedTile: null, disabled: true, system: buildTriggerSystem({ handlers: {} }), report, stubs, destinations };
+  }
   const events = new Set();
   const pseudoEvents = new Set();
   for (const mode of String(matt.trigger ?? '')
@@ -140,24 +433,22 @@ export function convertTile(tile) {
     mapping.events?.forEach((e) => events.add(e));
     mapping.pseudoEvents?.forEach((e) => pseudoEvents.add(e));
   }
-
-  const out = { report, stubs };
+  const out = { report, stubs, destinations, extraHandlers: {} };
   const sequence = { type: 'sequence', children: convertActions(matt.actions ?? [], out, matt) };
-  const handlers = {};
+  const handlers = { ...out.extraHandlers };
   for (const event of [...events, ...pseudoEvents]) handlers[event] = foundry.utils.deepClone(sequence);
-
   const fieldOverrides = {};
   for (const [mattKey, glyphKey] of Object.entries(FIELD_MAP)) if (matt[mattKey] !== undefined) fieldOverrides[glyphKey] = matt[mattKey];
-  for (const [mattKey, note] of Object.entries(DROPPED_FIELDS))
+  for (const [mattKey, note] of Object.entries(DROPPED_FIELDS)) {
     if (matt[mattKey] && matt[mattKey] !== DROPPED_DEFAULTS[mattKey]) report.push({ level: 'skipped', matt: { [mattKey]: matt[mattKey] }, note });
-
+  }
   const visible = tile.alpha > 0 && !!tile.texture?.src;
   const linkedTile = visible ? { kind: 'uuid', value: tile.uuid } : null;
-  if (!visible)
+  if (!visible) {
     report.push({ level: 'ok', matt: { tile: tile.name || tile.id }, note: 'Tile has no visible texture (alpha 0) - treated as an invisible marker; the Tile itself was not kept linked.' });
-
+  }
   const system = { ...buildTriggerSystem({ events: [...events], pseudoEvents: [...pseudoEvents], handlers }), ...fieldOverrides, linkedTile };
-  return { regionShape: regionShapeFromTile(tile), linkedTile, disabled: matt.active === false, system, report, stubs };
+  return { regionShape: regionShapeFromTile(tile), linkedTile, disabled: matt.active === false, system, report, stubs, destinations };
 }
 
 /**
@@ -188,15 +479,49 @@ export async function commitConversions(scene, entries) {
     : [];
   const macroUuidByStubId = Object.fromEntries(allStubs.map(({ stubId }, i) => [stubId, macros[i].uuid]));
 
+  const regionRefByDestId = {};
+  for (const destination of entries.flatMap((e) => e.converted.destinations)) {
+    const created = await createTeleportDestinationRegion(destination, scene);
+    if (created) regionRefByDestId[destination.destId] = created.ref;
+  }
+
   const regions = [];
+  const behaviorUuidByTileUuid = {};
+  const pendingIndexes = [];
   for (const { tile, converted } of entries) {
     const system = foundry.utils.deepClone(converted.system);
-    for (const event of Object.keys(system.handlers)) system.handlers[event] = resolveStubs(system.handlers[event], macroUuidByStubId);
+    let hasPending = false;
+    for (const event of Object.keys(system.handlers)) {
+      system.handlers[event] = resolveStubs(system.handlers[event], macroUuidByStubId);
+      system.handlers[event] = resolveDestinations(system.handlers[event], regionRefByDestId);
+      if (JSON.stringify(system.handlers[event]).includes('__pendingBehavior')) hasPending = true;
+    }
     const [region] = await scene.createEmbeddedDocuments('Region', [
       { name: tile.name || 'MATT Import', shapes: [converted.regionShape], behaviors: [{ type: MODULE.BEHAVIOR_TYPE, system, disabled: converted.disabled }] }
     ]);
     regions.push(region);
+    behaviorUuidByTileUuid[tile.uuid] = region.behaviors.find((b) => b.type === MODULE.BEHAVIOR_TYPE)?.uuid;
+    if (hasPending) pendingIndexes.push(regions.length - 1);
     if (!converted.linkedTile) await tile.delete();
   }
+
+  for (const i of pendingIndexes) {
+    const oldRegion = regions[i];
+    const { converted } = entries[i];
+    const system = foundry.utils.deepClone(converted.system);
+    for (const event of Object.keys(system.handlers)) {
+      system.handlers[event] = resolveStubs(system.handlers[event], macroUuidByStubId);
+      system.handlers[event] = resolveDestinations(system.handlers[event], regionRefByDestId);
+      system.handlers[event] = resolvePendingBehaviors(system.handlers[event], behaviorUuidByTileUuid);
+    }
+    const disabled = oldRegion.behaviors.find((b) => b.type === MODULE.BEHAVIOR_TYPE)?.disabled ?? false;
+    const name = oldRegion.name;
+    const shapes = oldRegion.shapes.map((s) => s.toObject());
+    await oldRegion.delete();
+    const [newRegion] = await scene.createEmbeddedDocuments('Region', [{ name, shapes, behaviors: [{ type: MODULE.BEHAVIOR_TYPE, system, disabled }] }]);
+    regions[i] = newRegion;
+    behaviorUuidByTileUuid[entries[i].tile.uuid] = newRegion.behaviors.find((b) => b.type === MODULE.BEHAVIOR_TYPE)?.uuid;
+  }
+
   return regions;
 }

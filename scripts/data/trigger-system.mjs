@@ -1,10 +1,8 @@
-/** Shared building blocks for static `glyph.trigger` `system` blobs. */
-
 /** @type {{kind: string, value: string}} A reference to the token that fired the event. */
-export const TOKEN = { kind: 'context', value: 'event.data.token' };
+export const TOKEN = { kind: 'triggerToken', value: '' };
 
 /** @type {{kind: string, value: string}} A reference to the actor of the token that fired the event. */
-export const ACTOR = { kind: 'context', value: 'event.data.token.actor' };
+export const ACTOR = { kind: 'triggerActor', value: '' };
 
 /**
  * Wrap one or more program nodes in a `sequence`.

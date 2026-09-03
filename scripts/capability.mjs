@@ -1,12 +1,8 @@
 /**
- * Whether a module is active, optionally requiring a minimum version.
+ * Whether a module is active.
  * @param {string} moduleId The module id.
- * @param {string} [minVersion] Minimum required version.
- * @returns {boolean} Whether the module is active and meets the version requirement.
+ * @returns {boolean} Whether the module is active.
  */
-export function isModuleActive(moduleId, minVersion) {
-  const module = game.modules.get(moduleId);
-  if (!module?.active) return false;
-  if (!minVersion) return true;
-  return !foundry.utils.isNewerVersion(minVersion, module.version);
+export function isModuleActive(moduleId) {
+  return game.modules.get(moduleId)?.active ?? false;
 }

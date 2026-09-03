@@ -1,33 +1,26 @@
+import { sendToAudience } from '../audience.mjs';
 import { MODULE } from '../constants.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
+import { registerRenderIntent } from '../queries.mjs';
 import { resolveReference } from '../targeting.mjs';
+import { AUDIENCE_FIELD } from './messaging.mjs';
 
-/** @type {string} Name of the module-owned playlist triggered sounds live in. */
-const PLAYLIST_NAME = 'Glyph';
+/** Stop or pause, on this client, every currently-playing Sound matching a source path. */
+registerRenderIntent('stopLoopingSound', ({ src, state }) => {
+  for (const sound of game.audio.playing.values()) {
+    if (sound.src !== src) continue;
+    if (state === 'pause') sound.pause();
+    else sound.stop();
+  }
+});
 
-/** @type {string} The tracking key used when `playSound`/`stopSound` don't specify one. */
-const DEFAULT_SOUND_KEY = 'default';
-
-/**
- * Get (creating if needed) the module-owned playlist.
- * @returns {Promise<Playlist>} The playlist.
- */
-async function getPlaylist() {
-  return game.playlists.getName(PLAYLIST_NAME) ?? Playlist.create({ name: PLAYLIST_NAME, mode: CONST.PLAYLIST_MODES.DISABLED });
-}
-
-/**
- * Stop or pause one tracked `PlaylistSound`.
- * @param {string} soundUuid The sound's UUID.
- * @param {string} [state] "stop" (default) or "pause".
- * @returns {Promise<void>}
- */
-async function stopTrackedSound(soundUuid, state) {
-  const sound = await fromUuid(soundUuid);
-  if (!(sound instanceof PlaylistSound)) return;
-  const pausedTime = state === 'pause' ? (sound.sound?.currentTime ?? sound.pausedTime) : 0;
-  await sound.update({ playing: false, pausedTime });
-}
+/** Play a sound on this client, honoring per-client scene restriction, overlap prevention, and fade-in. */
+registerRenderIntent('playSoundIntent', async ({ src, volume, loop, channel, sceneId, preventOverlap, fadeIn }) => {
+  if (sceneId && canvas.scene?.id !== sceneId) return;
+  if (preventOverlap && [...game.audio.playing.values()].some((sound) => sound.src === src)) return;
+  const sound = foundry.audio.AudioHelper.play({ src, volume: fadeIn ? 0 : volume, loop, channel, autoplay: true });
+  if (fadeIn) (await sound)?.fade(volume, { duration: fadeIn * 1000 });
+});
 
 registerNodeType('playSound', {
   category: 'audio',
@@ -43,22 +36,53 @@ registerNodeType('playSound', {
       label: 'GLYPH.ACTIONS.playSound.FIELDS.channel.label',
       choices: { music: 'GLYPH.AUDIO_CHANNELS.music', environment: 'GLYPH.AUDIO_CHANNELS.environment', interface: 'GLYPH.AUDIO_CHANNELS.interface' }
     },
-    { name: 'key', widget: 'text', label: 'GLYPH.ACTIONS.playSound.FIELDS.key.label', hint: 'GLYPH.ACTIONS.playSound.FIELDS.key.hint' }
+    { name: 'key', widget: 'text', label: 'GLYPH.ACTIONS.playSound.FIELDS.key.label', hint: 'GLYPH.ACTIONS.playSound.FIELDS.key.hint' },
+    { name: 'restrictToScene', widget: 'boolean', label: 'GLYPH.ACTIONS.playSound.FIELDS.restrictToScene.label', hint: 'GLYPH.ACTIONS.playSound.FIELDS.restrictToScene.hint' },
+    { name: 'preventOverlap', widget: 'boolean', label: 'GLYPH.ACTIONS.playSound.FIELDS.preventOverlap.label', hint: 'GLYPH.ACTIONS.playSound.FIELDS.preventOverlap.hint' },
+    { name: 'waitForCompletion', widget: 'boolean', label: 'GLYPH.ACTIONS.playSound.FIELDS.waitForCompletion.label', hint: 'GLYPH.ACTIONS.playSound.FIELDS.waitForCompletion.hint' },
+    { name: 'fadeIn', widget: 'number', min: 0, step: 0.5, label: 'GLYPH.ACTIONS.playSound.FIELDS.fadeIn.label', hint: 'GLYPH.ACTIONS.playSound.FIELDS.fadeIn.hint' },
+    AUDIENCE_FIELD
   ],
   validate(node) {
     if (typeof node.path !== 'string' || !node.path) throw new Error('playSound.path must be a non-empty string.');
   },
   async execute(node, context) {
-    const playlist = await getPlaylist();
-    const [sound] = await playlist.createEmbeddedDocuments('PlaylistSound', [
-      { name: node.path, path: node.path, playing: true, repeat: node.loop ?? false, volume: node.volume ?? 1, channel: node.channel ?? 'interface' }
-    ]);
+    const volume = node.volume ?? 1;
+    const channel = node.channel ?? 'interface';
+    const loop = node.loop === true;
+    const sceneId = node.restrictToScene ? (context.info.scene?.id ?? null) : null;
+    await sendToAudience(node.audience ?? 'everyone', context, 'playSoundIntent', {
+      src: node.path,
+      volume,
+      loop,
+      channel,
+      sceneId,
+      preventOverlap: !!node.preventOverlap,
+      fadeIn: node.fadeIn ?? 0
+    });
     const behavior = context.info.behavior;
-    if (!behavior) return;
-    const key = node.key || DEFAULT_SOUND_KEY;
-    const tracked = (behavior.getFlag(MODULE.ID, 'activeSounds') ?? []).filter((entry) => entry.key !== key);
-    tracked.push({ key, soundUuid: sound.uuid });
-    await behavior.setFlag(MODULE.ID, 'activeSounds', tracked);
+    const key = node.key || node.path;
+    let entryId;
+    if (behavior) {
+      const tracked = (behavior.getFlag(MODULE.ID, 'activeSounds') ?? []).filter((entry) => entry.key !== key);
+      entryId = foundry.utils.randomID();
+      tracked.push({ key, src: node.path, id: entryId });
+      await behavior.setFlag(MODULE.ID, 'activeSounds', tracked);
+    }
+    if (loop) return;
+    if (!entryId && !node.waitForCompletion) return;
+    const sound = await foundry.audio.AudioHelper.preloadSound(node.path);
+    if (entryId && sound?.duration) {
+      setTimeout(async () => {
+        const current = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
+        await behavior.setFlag(
+          MODULE.ID,
+          'activeSounds',
+          current.filter((entry) => entry.id !== entryId)
+        );
+      }, sound.duration * 1000);
+    }
+    if (node.waitForCompletion && sound?.duration) await new Promise((resolve) => setTimeout(resolve, sound.duration * 1000));
   }
 });
 
@@ -83,15 +107,17 @@ registerNodeType('stopSound', {
   async execute(node, context) {
     if (node.reference) {
       const target = resolveReference(node.reference, context);
-      if (target instanceof PlaylistSound) await stopTrackedSound(target.uuid, node.state);
-      else if (target instanceof AmbientSoundDocument) await target.update({ hidden: true });
+      if (target instanceof PlaylistSound) {
+        if (node.state === 'pause') await target.update({ playing: false, pausedTime: target.sound?.currentTime ?? target.pausedTime });
+        else await target.delete();
+      } else if (target instanceof AmbientSoundDocument) await target.update({ hidden: true });
       return;
     }
     const behavior = node.behavior ? resolveReference(node.behavior, context) : context.info.behavior;
     if (!(behavior instanceof RegionBehavior)) return;
     const tracked = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
     const [matching, remaining] = node.key ? [tracked.filter((e) => e.key === node.key), tracked.filter((e) => e.key !== node.key)] : [tracked, []];
-    await Promise.all(matching.map((entry) => stopTrackedSound(entry.soundUuid, node.state)));
+    await Promise.all(matching.map((entry) => sendToAudience('everyone', context, 'stopLoopingSound', { src: entry.src, state: node.state })));
     await behavior.setFlag(MODULE.ID, 'activeSounds', remaining);
   }
 });
@@ -107,8 +133,16 @@ registerNodeType('playPlaylist', {
       name: 'state',
       widget: 'select',
       label: 'GLYPH.ACTIONS.playPlaylist.FIELDS.state.label',
-      choices: { play: 'GLYPH.PLAYLIST_STATE.play', stop: 'GLYPH.PLAYLIST_STATE.stop', next: 'GLYPH.PLAYLIST_STATE.next', previous: 'GLYPH.PLAYLIST_STATE.previous' }
-    }
+      choices: {
+        play: 'GLYPH.PLAYLIST_STATE.play',
+        pause: 'GLYPH.PLAYLIST_STATE.pause',
+        stop: 'GLYPH.PLAYLIST_STATE.stop',
+        next: 'GLYPH.PLAYLIST_STATE.next',
+        previous: 'GLYPH.PLAYLIST_STATE.previous'
+      }
+    },
+    { name: 'volume', widget: 'number', min: 0, max: 1, step: 0.05, label: 'GLYPH.ACTIONS.playPlaylist.FIELDS.volume.label' },
+    { name: 'loop', widget: 'boolean', label: 'GLYPH.ACTIONS.playPlaylist.FIELDS.loop.label' }
   ],
   validate(node) {
     if (!node.target && (typeof node.name !== 'string' || !node.name)) throw new Error('playPlaylist requires either .name or .target.');
@@ -119,8 +153,16 @@ registerNodeType('playPlaylist', {
     const playlist = resolved instanceof Playlist ? resolved : (sound?.parent ?? game.playlists.getName(node.name));
     if (!playlist) return;
     const state = node.state ?? 'play';
-    if (state === 'play') await (sound ? playlist.playSound(sound) : playlist.playAll());
-    else if (state === 'stop') await (sound ? sound.update({ playing: false }) : playlist.stopAll());
+    if (state === 'play') {
+      if (!sound) await playlist.playAll();
+      else {
+        await playlist.playSound(sound);
+        const update = { repeat: !!node.loop };
+        if (typeof node.volume === 'number') update.volume = node.volume;
+        await sound.update(update);
+      }
+    } else if (state === 'pause') await (sound ? sound.update({ playing: false, pausedTime: sound.sound?.currentTime ?? 0 }) : playlist.stopAll());
+    else if (state === 'stop') await (sound ? sound.update({ playing: false, pausedTime: 0 }) : playlist.stopAll());
     else {
       const current = sound ?? playlist.sounds.find((s) => s.playing);
       if (current) await playlist.playNext(current.id, { direction: state === 'next' ? 1 : -1 });
