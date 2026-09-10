@@ -1,5 +1,5 @@
 import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
-import { registerHurtHealAdapter } from '../hurt-heal-adapters.mjs';
+import { registerHurtHealAdapter, toMessageMode } from '../hurt-heal-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
 import { resolveActorReference, resolveReference } from '../targeting.mjs';
@@ -88,13 +88,16 @@ export function registerDnd5eActions() {
   registerHurtHealAdapter(
     'dnd5e',
     async (actor, formula, { damageType, postCard, rollMode }) => {
-      const roll = damageType ? new CONFIG.Dice.DamageRoll(formula, actor.getRollData(), { type: damageType }) : new Roll(formula, actor.getRollData());
+      const heal = /^\s*-/.test(String(formula));
+      const type = heal ? 'healing' : damageType;
+      const rolled = heal ? String(formula).replace(/^\s*-/, '') : formula;
+      const roll = type ? new CONFIG.Dice.DamageRoll(rolled, actor.getRollData(), { type }) : new Roll(rolled, actor.getRollData());
       await roll.evaluate();
       if (postCard) {
-        const typeLabel = CONFIG.DND5E.damageTypes[damageType]?.label ?? CONFIG.DND5E.healingTypes[damageType]?.label;
-        await roll.toMessage({ flavor: typeLabel ? _loc(typeLabel) : undefined, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: rollMode || undefined });
+        const typeLabel = CONFIG.DND5E.damageTypes[type]?.label ?? CONFIG.DND5E.healingTypes[type]?.label;
+        await roll.toMessage({ flavor: typeLabel ? _loc(typeLabel) : undefined, speaker: ChatMessage.getSpeaker({ actor }) }, { messageMode: toMessageMode(rollMode) });
       }
-      const damages = damageType ? [{ value: roll.total, type: damageType }] : roll.total;
+      const damages = type ? [{ value: roll.total, type }] : roll.total;
       await actor.applyDamage(damages);
     },
     Object.fromEntries(Object.entries({ ...CONFIG.DND5E.damageTypes, ...CONFIG.DND5E.healingTypes }).map(([key, { label }]) => [key, label]))

@@ -13,7 +13,7 @@ const ROOT_MAP = {
   method: 'event.name'
 };
 
-/** @type {Set<string>} Roots `resolvePath` exposes (run-context.mjs:60-62). */
+/** @type {Set<string>} Roots `resolvePath` exposes. */
 const GLYPH_ROOTS = new Set(['token', 'scene', 'event', 'region', 'behavior', 'variables', 'previous', 'results', 'item', 'triggerCount', 'isAuthority', 'id']);
 
 /**

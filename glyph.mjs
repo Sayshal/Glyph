@@ -45,7 +45,13 @@ Hooks.once('init', () => {
   foundry.applications.handlebars.loadTemplates([
     `${MODULE.TEMPLATES}/partials/tree-node.hbs`,
     `${MODULE.TEMPLATES}/partials/tree-widget.hbs`,
+    `${MODULE.TEMPLATES}/partials/point-coordinates.hbs`,
+    `${MODULE.TEMPLATES}/partials/point-mode.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-kind.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-value.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-value-collection.hbs`,
     `${MODULE.TEMPLATES}/partials/reference-value-context.hbs`,
+    `${MODULE.TEMPLATES}/partials/reference-value-tag.hbs`,
     `${MODULE.TEMPLATES}/partials/reference-value-uuid.hbs`
   ]);
   registerTriggerBehavior();
