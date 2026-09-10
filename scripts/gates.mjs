@@ -8,7 +8,8 @@ import { MODULE } from './constants.mjs';
  */
 export async function checkGates(behavior, event) {
   const system = behavior.system;
-  if (!restrictionAllows(system.restriction, event.user)) return false;
+  if (!userRestrictionAllows(system.userRestriction, event.user)) return false;
+  if (!tokenRestrictionAllows(system.tokenRestriction, event.data?.token)) return false;
   if (system.vision && !hasVision(event)) return false;
   if (!ATLAS.isPrimaryGM) return false;
   if (game.paused && !system.allowPaused) return false;
@@ -21,15 +22,28 @@ export async function checkGates(behavior, event) {
 }
 
 /**
- * Whether `restriction` permits `user`.
+ * Whether `restriction` permits the triggering user.
  * @param {string} restriction One of "all", "player", "gm".
  * @param {User} user The triggering user.
  * @returns {boolean}
  */
-function restrictionAllows(restriction, user) {
+function userRestrictionAllows(restriction, user) {
   if (restriction === 'gm') return user.isGM;
   if (restriction === 'player') return !user.isGM;
   return true;
+}
+
+/**
+ * Whether `restriction` permits the event's token, by its actor's player ownership.
+ * @param {string} restriction One of "all", "player", "gm".
+ * @param {TokenDocument|undefined} token The token that fired the event, if any.
+ * @returns {boolean}
+ */
+function tokenRestrictionAllows(restriction, token) {
+  if (restriction !== 'gm' && restriction !== 'player') return true;
+  if (!token) return true;
+  const playerOwned = !!token.actor?.hasPlayerOwner;
+  return restriction === 'gm' ? !playerOwned : playerOwned;
 }
 
 /**
@@ -80,7 +94,7 @@ function alreadyTriggeredToken(behavior, event) {
 }
 
 /** @type {number} Maximum retained history entries per behavior. */
-const HISTORY_CAP = 50;
+const HISTORY_CAP = 500;
 
 /**
  * Record a successful fire: reset the cooldown clock and append (capped) history.
@@ -91,7 +105,7 @@ const HISTORY_CAP = 50;
 async function recordSuccess(behavior, event) {
   const history = behavior.getFlag(MODULE.ID, 'history') ?? [];
   const tokenId = event.data?.token?.id ?? null;
-  history.push({ tokenId, name: event.name, time: Date.now() });
+  history.push({ tokenId, userId: event.user?.id ?? null, name: event.name, time: Date.now() });
   await behavior.update({
     [`flags.${MODULE.ID}.lastTriggered`]: game.time.worldTime,
     [`flags.${MODULE.ID}.history`]: history.slice(-HISTORY_CAP)
@@ -108,6 +122,34 @@ async function recordSuccess(behavior, event) {
 export async function recordFailure(behavior, event, error) {
   const history = behavior.getFlag(MODULE.ID, 'history') ?? [];
   const tokenId = event.data?.token?.id ?? null;
-  history.push({ tokenId, name: event.name, time: Date.now(), error: error.message });
+  history.push({ tokenId, userId: event.user?.id ?? null, name: event.name, time: Date.now(), error: error.message });
   await behavior.setFlag(MODULE.ID, 'history', history.slice(-HISTORY_CAP));
+}
+
+/** @type {Set<string>} Token ids whose triggers are suppressed while a teleport is in flight. */
+const suppressedTokens = new Set();
+
+/**
+ * Await `fn` with every trigger for `ids` suppressed for its duration.
+ * @param {string[]} ids The token ids to suppress. An empty array suppresses nothing.
+ * @param {() => Promise<*>} fn The operation to await.
+ * @returns {Promise<*>} `fn`'s resolved value.
+ */
+export async function withTriggersSuppressed(ids, fn) {
+  for (const id of ids) suppressedTokens.add(id);
+  try {
+    return await fn();
+  } finally {
+    for (const id of ids) suppressedTokens.delete(id);
+  }
+}
+
+/**
+ * Whether `event`'s token is mid-teleport with its triggers suppressed.
+ * @param {RunSource['event']} event A normalized run source's event.
+ * @returns {boolean}
+ */
+export function isSuppressed(event) {
+  const tokenId = event.data?.token?.id;
+  return !!tokenId && suppressedTokens.has(tokenId);
 }

@@ -1,4 +1,5 @@
-import { sendToAudience } from '../audience.mjs';
+import { resolveAudience, sendToAudience } from '../audience.mjs';
+import { batchCreate, batchUpdate } from '../batch.mjs';
 import { runTrigger } from '../manual-trigger.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerRenderIntent } from '../queries.mjs';
@@ -41,6 +42,76 @@ registerRenderIntent('openActorSheet', async ({ uuid }) => {
   actor.sheet.render({ force: true });
 });
 
+/** @type {object} A chat message's whisper audience. */
+const CHAT_AUDIENCE_FIELD = {
+  name: 'audience',
+  widget: 'select',
+  label: 'GLYPH.ACTIONS.FIELDS.audience.label',
+  hint: 'GLYPH.ACTIONS.chatMessage.FIELDS.audience.hint',
+  choices: { everyone: 'GLYPH.AUDIENCE.everyone', players: 'GLYPH.AUDIENCE.players', gm: 'GLYPH.AUDIENCE.gm', triggeringUser: 'GLYPH.AUDIENCE.triggeringUser' }
+};
+
+/** @type {object} Chat bubble display choices. */
+const CHAT_BUBBLE_CHOICES = {
+  message: 'GLYPH.CHAT_BUBBLE.message',
+  messageAndBubble: 'GLYPH.CHAT_BUBBLE.messageAndBubble',
+  bubbleOnly: 'GLYPH.CHAT_BUBBLE.bubbleOnly'
+};
+
+registerRenderIntent('chatBubble', ({ sceneId, tokenId, content }) => {
+  if (canvas.scene?.id !== sceneId) return;
+  const token = canvas.tokens.get(tokenId);
+  if (token) canvas.hud.bubbles.say(token, content);
+});
+
+/**
+ * Build a `chatMessage` node's `ChatMessage.create()` data, before `applyMode` is applied.
+ * @param {object} node The `chatMessage` node.
+ * @param {object} context The active run context.
+ * @returns {object} The chat message data.
+ */
+function chatMessageData(node, context) {
+  const token = context.info.event.data?.token?.object ?? null;
+  const speakerRef = node.speaker ? resolveReference(node.speaker, context) : null;
+  const speaker =
+    speakerRef instanceof Actor
+      ? ChatMessage.getSpeaker({ actor: speakerRef })
+      : speakerRef
+        ? ChatMessage.getSpeaker({ token: speakerRef })
+        : token
+          ? ChatMessage.getSpeaker({ token })
+          : ChatMessage.getSpeaker();
+  return {
+    content: interpolate(node.text, context),
+    flavor: node.flavor ? interpolate(node.flavor, context) : undefined,
+    style: node.inCharacter ? CONST.CHAT_MESSAGE_STYLES.IC : CONST.CHAT_MESSAGE_STYLES.OOC,
+    speaker,
+    author: context.info.event.user?.id,
+    flags: node.language ? { polyglot: { language: node.language } } : undefined
+  };
+}
+
+/** Apply a message's roll mode, then narrow it to its audience. */
+function applyChatVisibility(chatData, node, context) {
+  ChatMessage.applyMode(chatData, node.rollMode);
+  if (node.audience && node.audience !== 'everyone') chatData.whisper = resolveAudience(node.audience, context).map((user) => user.id);
+}
+
+/** Whether text is a chat command rather than message content. */
+function isChatCommand(content) {
+  return content.startsWith('/') || content.startsWith('[[/');
+}
+
+/** Show a chat bubble over the speaker token, for everyone in the message's audience. */
+async function sayChatBubble(node, chatData, context) {
+  if (!node.bubble || node.bubble === 'message' || !chatData.speaker?.token) return;
+  await sendToAudience(node.audience ?? 'everyone', context, 'chatBubble', {
+    sceneId: chatData.speaker.scene,
+    tokenId: chatData.speaker.token,
+    content: chatData.content
+  });
+}
+
 registerNodeType('chatMessage', {
   category: 'messaging',
   label: 'GLYPH.ACTIONS.chatMessage.label',
@@ -50,31 +121,34 @@ registerNodeType('chatMessage', {
     { name: 'flavor', widget: 'text', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.flavor.label', hint: INTERPOLATED_TEXT_HINT },
     { name: 'speaker', widget: 'reference', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.speaker.label', hint: 'GLYPH.ACTIONS.chatMessage.FIELDS.speaker.hint' },
     { name: 'inCharacter', widget: 'boolean', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.inCharacter.label' },
-    { name: 'rollMode', widget: 'rollMode', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.rollMode.label' }
+    { name: 'bubble', widget: 'select', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.bubble.label', hint: 'GLYPH.ACTIONS.chatMessage.FIELDS.bubble.hint', choices: CHAT_BUBBLE_CHOICES },
+    CHAT_AUDIENCE_FIELD,
+    { name: 'rollMode', widget: 'rollMode', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.rollMode.label' },
+    { name: 'language', widget: 'language', label: 'GLYPH.ACTIONS.chatMessage.FIELDS.language.label', hint: 'GLYPH.ACTIONS.chatMessage.FIELDS.language.hint' }
   ],
   validate(node) {
     if (typeof node.text !== 'string' || !node.text) throw new Error('chatMessage.text must be a non-empty string.');
   },
   async execute(node, context) {
-    const token = context.info.event.data?.token?.object ?? null;
-    const speakerRef = node.speaker ? resolveReference(node.speaker, context) : null;
-    const speaker =
-      speakerRef instanceof Actor
-        ? ChatMessage.getSpeaker({ actor: speakerRef })
-        : speakerRef
-          ? ChatMessage.getSpeaker({ token: speakerRef })
-          : token
-            ? ChatMessage.getSpeaker({ token })
-            : ChatMessage.getSpeaker();
-    const chatData = {
-      content: interpolate(node.text, context),
-      flavor: node.flavor ? interpolate(node.flavor, context) : undefined,
-      style: node.inCharacter ? CONST.CHAT_MESSAGE_STYLES.IC : CONST.CHAT_MESSAGE_STYLES.OOC,
-      speaker,
-      author: context.info.event.user?.id
-    };
-    ChatMessage.applyMode(chatData, node.rollMode);
-    await ChatMessage.create(chatData);
+    const chatData = chatMessageData(node, context);
+    if (isChatCommand(chatData.content)) return void (await ui.chat.processMessage(chatData.content, { speaker: chatData.speaker }));
+    applyChatVisibility(chatData, node, context);
+    await sayChatBubble(node, chatData, context);
+    if (node.bubble !== 'bubbleOnly') await ChatMessage.create(chatData);
+  },
+  async batchExecute(pairs) {
+    const entries = [];
+    for (const { node, context } of pairs) {
+      const chatData = chatMessageData(node, context);
+      if (isChatCommand(chatData.content)) {
+        await ui.chat.processMessage(chatData.content, { speaker: chatData.speaker });
+        continue;
+      }
+      applyChatVisibility(chatData, node, context);
+      await sayChatBubble(node, chatData, context);
+      if (node.bubble !== 'bubbleOnly') entries.push({ parent: null, documentName: 'ChatMessage', data: chatData });
+    }
+    await batchCreate(entries);
   }
 });
 
@@ -209,19 +283,52 @@ registerNodeType('openActorSheet', {
 /** @type {Map<string, InstanceType<typeof foundry.applications.api.DialogV2>>} Open showDialog instances, keyed by the triggering behavior's UUID, so closeDialog can find one to close. */
 const openDialogs = new Map();
 
-registerRenderIntent('showDialog', ({ title, content, buttons, closeHandler, behaviorUuid }) => {
+/** @type {string} Action id of the hidden button standing in for a dialog whose content carries its own controls. */
+const NO_BUTTON = 'glyphNoButton';
+
+/**
+ * Render a dialog's HTML file, giving Handlebars the same paths `{{...}}` interpolation resolves.
+ * @param {string} path Path to the HTML file.
+ * @param {object} context The active run context.
+ * @returns {Promise<string>} The rendered markup.
+ */
+function renderContentFile(path, context) {
+  return foundry.applications.handlebars.renderTemplate(path, { ...context.info, ...context.info.event?.data, ...context });
+}
+
+/**
+ * Read a dialog's form fields, so a button handler and a content-authored `goto` both see what was filled in.
+ * @param {InstanceType<typeof foundry.applications.api.DialogV2>} dialog The open dialog.
+ * @returns {object} The form's expanded field values.
+ */
+function dialogFormData(dialog) {
+  const form = dialog.element?.querySelector('form');
+  return form ? new foundry.applications.ux.FormDataExtended(form).object : {};
+}
+
+registerRenderIntent('showDialog', ({ title, content, buttons, closeHandler, width, height, behaviorUuid }) => {
   openDialogs.get(behaviorUuid)?.close();
   let submitted = false;
+  const body = document.createElement('div');
+  body.innerHTML = content?.includes('<') ? content : `<p>${content ?? ''}</p>`;
   const dialog = new foundry.applications.api.DialogV2({
     window: { title },
-    content: `<p>${content}</p>`,
-    buttons: (buttons?.length ? buttons : [{ label: _loc('COMMON.Confirm') }]).map((button, i) => ({
-      action: `button${i}`,
-      label: button.label,
-      callback: () => (button.handler ? runTrigger(behaviorUuid, button.handler) : undefined)
-    })),
-    submit: () => {
+    position: { width: width || 'auto', height: height || 'auto' },
+    content: body,
+    buttons: Array.isArray(buttons)
+      ? buttons.length
+        ? buttons.map((button, i) => ({
+            action: `button${i}`,
+            label: button.label,
+            callback: (_event, _target, dlg) => (button.handler ? runTrigger(behaviorUuid, button.handler, dialogFormData(dlg)) : undefined)
+          }))
+        : [{ action: NO_BUTTON, label: '', style: { display: 'none' } }]
+      : [{ action: 'button0', label: _loc('COMMON.Confirm') }],
+    submit: (result, dlg) => {
       submitted = true;
+      if (result !== undefined && result !== NO_BUTTON) return;
+      const data = dialogFormData(dlg);
+      if (data.goto) runTrigger(behaviorUuid, String(data.goto), data);
     }
   });
   dialog.addEventListener(
@@ -245,24 +352,29 @@ registerNodeType('showDialog', {
   label: 'GLYPH.ACTIONS.showDialog.label',
   hint: 'GLYPH.ACTIONS.showDialog.hint',
   fields: [
-    { name: 'title', widget: 'text', label: 'GLYPH.ACTIONS.showDialog.FIELDS.title.label', hint: INTERPOLATED_TEXT_HINT, required: true },
+    { name: 'title', widget: 'text', label: 'GLYPH.ACTIONS.showDialog.FIELDS.title.label', hint: INTERPOLATED_TEXT_HINT },
     { name: 'content', widget: 'textarea', label: 'GLYPH.ACTIONS.showDialog.FIELDS.content.label', hint: INTERPOLATED_TEXT_HINT },
+    { name: 'contentFile', widget: 'file', filePickerType: 'html', label: 'GLYPH.ACTIONS.showDialog.FIELDS.contentFile.label', hint: 'GLYPH.ACTIONS.showDialog.FIELDS.contentFile.hint' },
     { name: 'buttons', widget: 'json', label: 'GLYPH.ACTIONS.showDialog.FIELDS.buttons.label', hint: 'GLYPH.ACTIONS.showDialog.FIELDS.buttons.hint' },
     { name: 'closeHandler', widget: 'handlerRef', label: 'GLYPH.ACTIONS.showDialog.FIELDS.closeHandler.label', hint: 'GLYPH.ACTIONS.showDialog.FIELDS.closeHandler.hint' },
+    { name: 'width', widget: 'number', label: 'GLYPH.ACTIONS.showDialog.FIELDS.width.label', hint: 'GLYPH.ACTIONS.showDialog.FIELDS.width.hint' },
+    { name: 'height', widget: 'number', label: 'GLYPH.ACTIONS.showDialog.FIELDS.height.label', hint: 'GLYPH.ACTIONS.showDialog.FIELDS.height.hint' },
     AUDIENCE_FIELD
   ],
   validate(node) {
-    if (typeof node.title !== 'string' || !node.title) throw new Error('showDialog.title must be a non-empty string.');
+    if (node.title !== undefined && typeof node.title !== 'string') throw new Error('showDialog.title must be a string.');
     if (node.buttons !== undefined && node.buttons !== '' && !Array.isArray(node.buttons)) {
       throw new Error('showDialog.buttons must be an array of {label, handler} objects.');
     }
   },
   async execute(node, context) {
     await sendToAudience(node.audience, context, 'showDialog', {
-      title: interpolate(node.title, context),
-      content: interpolate(node.content ?? '', context),
-      buttons: node.buttons || [],
+      title: interpolate(node.title ?? '', context),
+      content: node.contentFile ? await renderContentFile(node.contentFile, context) : interpolate(node.content ?? '', context),
+      buttons: node.buttons || undefined,
       closeHandler: node.closeHandler || undefined,
+      width: node.width || undefined,
+      height: node.height || undefined,
       behaviorUuid: context.info.behavior.uuid
     });
   }
@@ -278,12 +390,87 @@ registerNodeType('closeDialog', {
   }
 });
 
+/**
+ * Apply a `writeToJournal` node's edit mode against a journal page's existing content.
+ * @param {string} mode "append"/"prepend"/"overwrite"/"insert".
+ * @param {string} existing The page's current content.
+ * @param {string} text The interpolated text to write.
+ * @param {number} [index] The insertion index, for "insert".
+ * @param {number} [replaceCount] Characters the insertion overwrites, for "insert".
+ * @returns {string} The new content.
+ */
+function journalContent(mode, existing, text, index, replaceCount) {
+  if (mode === 'overwrite') return text;
+  if (mode === 'prepend') return `${text}${existing}`;
+  if (mode === 'insert') return `${existing.slice(0, index ?? 0)}${text}${existing.slice((index ?? 0) + (replaceCount ?? 0))}`;
+  return `${existing}${text}`;
+}
+
+/**
+ * Wrap text in Polyglot's journal markup.
+ * @param {string} text The text to wrap.
+ * @param {string} [language] The Polyglot language id.
+ * @returns {string} The wrapped text.
+ */
+function polyglotText(text, language) {
+  if (!language || !game.modules.get('polyglot')?.active) return text;
+  const id = language.includes(':') ? language.split(':')[1] : language;
+  if (!id) return text;
+  return `<span class="polyglot-journal" title="${game.polyglot?.languages?.[id]?.label ?? id}" data-language="${id}">${text}</span>`;
+}
+
+/**
+ * Resolve a `writeToJournal` target to its page, creating it when asked.
+ * @param {object} node The `writeToJournal` node.
+ * @param {RunContext} context The active run context.
+ * @returns {Promise<JournalEntryPage|null>} The page, or null.
+ */
+async function journalPage(node, context) {
+  const doc = await fromUuid(node.pageUuid);
+  if (doc instanceof JournalEntryPage) return doc;
+  const entry = doc instanceof JournalEntry ? doc : await missingPageEntry(node.pageUuid);
+  if (!entry) return null;
+  if (!node.createPage) return entry.pages.contents[0] ?? null;
+  const name = interpolate(node.pageName, context) || entry.name;
+  const [created] = await JournalEntryPage.createDocuments([{ type: 'text', name }], { parent: entry });
+  return created ?? null;
+}
+
+/**
+ * The final text a `writeToJournal` node writes: interpolated, Polyglot-wrapped, then broken.
+ * @param {object} node The `writeToJournal` node.
+ * @param {RunContext} context The active run context.
+ * @returns {string} The text to write.
+ */
+function journalText(node, context) {
+  const text = polyglotText(interpolate(node.text, context), node.language);
+  return node.line ? `${text}</br>` : text;
+}
+
+/**
+ * The JournalEntry behind a page uuid that no longer resolves.
+ * @param {string} uuid The unresolved page uuid.
+ * @returns {Promise<JournalEntry|null>} The parent entry, or null.
+ */
+async function missingPageEntry(uuid) {
+  const entryUuid = String(uuid ?? '').split('.JournalEntryPage.')[0];
+  if (entryUuid === uuid) return null;
+  const entry = await fromUuid(entryUuid);
+  return entry instanceof JournalEntry ? entry : null;
+}
+
 registerNodeType('writeToJournal', {
   category: 'messaging',
   label: 'GLYPH.ACTIONS.writeToJournal.label',
   hint: 'GLYPH.ACTIONS.writeToJournal.hint',
   fields: [
-    { name: 'pageUuid', widget: 'uuid', documentType: 'JournalEntryPage', label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.pageUuid.label', required: true },
+    {
+      name: 'pageUuid',
+      widget: 'uuid',
+      label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.pageUuid.label',
+      hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.pageUuid.hint',
+      required: true
+    },
     { name: 'text', widget: 'textarea', label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.text.label', hint: INTERPOLATED_TEXT_HINT, required: true },
     {
       name: 'mode',
@@ -291,7 +478,12 @@ registerNodeType('writeToJournal', {
       label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.mode.label',
       choices: { append: 'GLYPH.JOURNAL_MODE.append', prepend: 'GLYPH.JOURNAL_MODE.prepend', overwrite: 'GLYPH.JOURNAL_MODE.overwrite', insert: 'GLYPH.JOURNAL_MODE.insert' }
     },
-    { name: 'index', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.index.label', hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.index.hint' }
+    { name: 'index', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.index.label', hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.index.hint' },
+    { name: 'replaceCount', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.replaceCount.label', hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.replaceCount.hint' },
+    { name: 'line', widget: 'boolean', label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.line.label', hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.line.hint' },
+    { name: 'createPage', widget: 'boolean', label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.createPage.label', hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.createPage.hint' },
+    { name: 'pageName', widget: 'text', label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.pageName.label', hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.pageName.hint' },
+    { name: 'language', widget: 'language', label: 'GLYPH.ACTIONS.writeToJournal.FIELDS.language.label', hint: 'GLYPH.ACTIONS.writeToJournal.FIELDS.language.hint' }
   ],
   validate(node) {
     if (typeof node.pageUuid !== 'string' || typeof node.text !== 'string') {
@@ -299,19 +491,27 @@ registerNodeType('writeToJournal', {
     }
   },
   async execute(node, context) {
-    const page = await fromUuid(node.pageUuid);
-    if (!(page instanceof JournalEntryPage)) return;
-    const text = interpolate(node.text, context);
-    const mode = node.mode ?? 'append';
-    const existing = page.text.content ?? '';
-    const content =
-      mode === 'overwrite'
-        ? text
-        : mode === 'prepend'
-          ? `${text}${existing}`
-          : mode === 'insert'
-            ? `${existing.slice(0, node.index ?? 0)}${text}${existing.slice(node.index ?? 0)}`
-            : `${existing}${text}`;
+    const page = await journalPage(node, context);
+    if (!page) return;
+    const content = journalContent(node.mode ?? 'append', page.text.content ?? '', journalText(node, context), node.index, node.replaceCount);
     await page.update({ 'text.content': content });
+  },
+  async batchExecute(pairs) {
+    const resolved = await Promise.all(pairs.map(async ({ node, context }) => ({ node, context, page: await journalPage(node, context) })));
+    const groups = new Map();
+    for (const { node, context, page } of resolved) {
+      if (!page) continue;
+      if (!groups.has(page)) groups.set(page, []);
+      groups.get(page).push({ node, context });
+    }
+    await batchUpdate(
+      [...groups.entries()].map(([page, items]) => {
+        let content = page.text.content ?? '';
+        for (const { node, context } of items) {
+          content = journalContent(node.mode ?? 'append', content, journalText(node, context), node.index, node.replaceCount);
+        }
+        return { doc: page, changes: { 'text.content': content } };
+      })
+    );
   }
 });

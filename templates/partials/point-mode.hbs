@@ -1,0 +1,4 @@
+<select data-path="{{path}}.kind" data-field="kind" class="glyph-point-mode">
+  <option value="" {{#unless refKind}}selected{{/unless}}>{{localize "GLYPH.POINT.coordinates"}}</option>
+  <option value="document" {{#if refKind}}selected{{/if}}>{{localize "GLYPH.POINT.fromDocument"}}</option>
+</select>

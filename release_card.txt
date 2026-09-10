@@ -1,0 +1,7 @@
+## New Features
+
+- A visual, node-based trigger editor built into the Region's own behavior config: if/else branches, forEach loops, goto jumps and waits composed from nodes, no macro code required.
+- Over 60 actions across tokens, tiles, scenes, audio and messaging, plus pseudo-events for hover, click, door state, world time, darkness and calendar changes.
+- A Monks Active Tile Triggers importer converts an existing tile's actions into a glyph program and reports what still needs manual review.
+- Per-trigger gating: restrict to players or the GM, roll a percent chance, require a minimum number of tokens, apply a cooldown, or require line of sight.
+- 40 ready-made example triggers across audio, messaging, scene, tile, token, variables and logic, applicable from the config UI as a starting point.

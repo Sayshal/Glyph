@@ -31,34 +31,21 @@
         {{/each}}</datalist>
     </div>
   {{else if (eq kind "point")}}
-    <div class="glyph-point">
-      <label>{{localize "GLYPH.POINT.x"}} <input type="number" data-path="{{path}}.x" data-field="x"
-          value="{{x}}"></label>
-      <label>{{localize "GLYPH.POINT.y"}} <input type="number" data-path="{{path}}.y" data-field="y"
-          value="{{y}}"></label>
-      <label>{{localize "GLYPH.POINT.elevation"}} <input type="number" data-path="{{path}}.elevation"
-          data-field="elevation" value="{{elevation}}"></label>
+    <div class="glyph-reference" data-document-type="{{documentType}}">
+      {{> "modules/glyph/templates/partials/point-mode.hbs" path=path refKind=refKind}}
+      {{#if refKind}}
+        {{> "modules/glyph/templates/partials/reference-kind.hbs" path=path refKind=refKind}}
+        {{> "modules/glyph/templates/partials/reference-value.hbs" refKind=refKind refValuePath=refValuePath
+          refValue=refValue refResolvers=refResolvers documentType=documentType}}
+      {{else}}
+        {{> "modules/glyph/templates/partials/point-coordinates.hbs" path=path x=x y=y elevation=elevation}}
+      {{/if}}
     </div>
   {{else if (eq kind "reference")}}
     <div class="glyph-reference" data-document-type="{{documentType}}">
-      <select data-path="{{path}}.kind" data-field="kind" class="glyph-ref-kind">
-        <option value="uuid" {{#if (eq refKind "uuid")}}selected{{/if}}>{{localize "GLYPH.REFERENCE_KIND.uuid"}}
-        </option>
-        <option value="triggerToken" {{#if (eq refKind "triggerToken")}}selected{{/if}}>
-          {{localize "GLYPH.REFERENCE_KIND.triggerToken"}}
-        </option>
-        <option value="triggerActor" {{#if (eq refKind "triggerActor")}}selected{{/if}}>
-          {{localize "GLYPH.REFERENCE_KIND.triggerActor"}}
-        </option>
-        <option value="context" {{#if (eq refKind "context")}}selected{{/if}}>
-          {{localize "GLYPH.REFERENCE_KIND.context"}}
-        </option>
-      </select>
-      {{#if (eq refKind "context")}}
-        {{> "modules/glyph/templates/partials/reference-value-context.hbs" path=refValuePath}}
-      {{else if (eq refKind "uuid")}}
-        {{> "modules/glyph/templates/partials/reference-value-uuid.hbs" path=refValuePath documentType=documentType}}
-      {{/if}}
+      {{> "modules/glyph/templates/partials/reference-kind.hbs" path=path refKind=refKind}}
+      {{> "modules/glyph/templates/partials/reference-value.hbs" refKind=refKind refValuePath=refValuePath
+        refValue=refValue refResolvers=refResolvers documentType=documentType}}
     </div>
   {{else if (eq kind "expression")}}
     <input type="text" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" value="{{value}}"

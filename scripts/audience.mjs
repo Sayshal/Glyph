@@ -3,7 +3,7 @@ import { sendRenderIntent } from './queries.mjs';
 /**
  * Resolve an audience keyword to the users a player-facing render action should reach.
  * @param {string} audience One of "triggeringUser" (default), "everyone", "players", "gm".
- * @param {import('./run-context.mjs').RunContext} context The active run context.
+ * @param {object} context The active run context.
  * @returns {User[]} The users to target.
  */
 export function resolveAudience(audience, context) {
@@ -21,9 +21,19 @@ export function resolveAudience(audience, context) {
 }
 
 /**
+ * The connected user who should answer a prompted roll: the actor's first active non-GM owner, or the active GM.
+ * @param {Actor} actor The actor being asked to roll.
+ * @returns {User|null} The user to prompt, or null when nobody suitable is connected.
+ */
+export function resolveRollPrompter(actor) {
+  const owner = game.users.find((u) => u.active && !u.isGM && actor.testUserPermission(u, 'OWNER'));
+  return owner ?? game.users.activeGM ?? null;
+}
+
+/**
  * Send a render intent to every user in an audience.
  * @param {string} audience One of "triggeringUser" (default), "everyone", "players", "gm".
- * @param {import('./run-context.mjs').RunContext} context The active run context.
+ * @param {object} context The active run context.
  * @param {string} name The intent name, as registered via `registerRenderIntent`.
  * @param {object} [data] The intent payload.
  * @returns {Promise<void>}

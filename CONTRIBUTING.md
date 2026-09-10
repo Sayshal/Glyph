@@ -47,7 +47,7 @@ npm run build
 
 ## Pre-commit Hook
 
-After `npm install`, a pre-commit hook runs automatically via [Husky](https://typicode.github.io/husky/). It uses [lint-staged](https://github.com/lint-staged/lint-staged) to auto-fix staged files:
+The repo installs no hook of its own. On the maintainer machine a global git hook runs [lint-staged](https://github.com/lint-staged/lint-staged) when `node_modules` is present, auto-fixing staged files; contributors without it should run `npm run validate` before pushing. lint-staged covers:
 
 - **JS/MJS** — Prettier + ESLint
 - **CSS** — Prettier + Stylelint

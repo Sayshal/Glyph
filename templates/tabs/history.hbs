@@ -5,6 +5,7 @@
       {{#each historyEntries as |entry|}}
         <li class="glyph-history-row">
           <span class="glyph-history-name">{{entry.name}}</span>
+          {{#if entry.userName}}<span class="glyph-history-user">{{entry.userName}}</span>{{/if}}
           <span class="glyph-history-time">{{entry.timeLabel}}</span>
           {{#if entry.error}}<span class="glyph-history-error">{{entry.error}}</span>{{/if}}
           <button type="button" data-line-action="delete-history" data-index="{{entry.index}}"
@@ -14,6 +15,9 @@
         </li>
       {{/each}}
     </ul>
+    <button type="button" class="glyph-history-reset" data-line-action="reset-history">
+      <i class="fa-solid fa-arrow-rotate-left"></i> {{localize "GLYPH.HISTORY.reset"}}
+    </button>
   {{else}}
     <p class="hint">{{localize "GLYPH.PLACEHOLDER.history"}}</p>
   {{/if}}

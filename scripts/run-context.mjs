@@ -8,11 +8,15 @@ import { MODULE } from './constants.mjs';
  * @property {object} control Mutable control-flow signals.
  * @property {object} variables Lookup built from the persisted `{name, value}[]` array.
  * @property {*} previous Whatever the most recent producing action set it to, readable as `{{previous}}`.
+ * @property {object} results Every producing action's result so far, merged, readable as `{{results.<name>}}`.
  */
+
+/** @type {Map<string, RunContext>} The live run context per behavior UUID, so one trigger can stop another's chain. */
+export const activeRuns = new Map();
 
 /**
  * Build a fresh run context from a normalized run source.
- * @param {import('./data/trigger-behavior.mjs').RunSource} source The normalized run source.
+ * @param {object} source The normalized run source.
  * @param {RegionBehavior} behavior The triggering behavior document.
  * @returns {RunContext} The new run context.
  */
@@ -28,20 +32,34 @@ export function createRunContext(source, behavior) {
       triggerCount: behavior?.getFlag(MODULE.ID, 'triggerCount') ?? 0
     }),
     collections: new Map(),
-    control: { stopped: false, goto: null, pause: false },
+    control: { stopped: false, skip: false, goto: null, pause: false },
     variables: Object.fromEntries((behavior?.getFlag(MODULE.ID, 'variables') ?? []).map((entry) => [entry.name, entry.value])),
-    previous: null
+    previous: null,
+    results: {}
   };
 }
 
 /**
- * Resolve a `{{path}}` expression path against a run context, with `info`'s contents exposed at the top level (e.g. `event.name`, not `info.event.name`) and the triggering event's own payload exposed at the top level too (e.g. `token.name`, not `event.data.token.name`).
+ * Record a producing action's result: the single `{{previous}}` slot, plus a merge into the cumulative `{{results}}` bag.
+ * @param {RunContext} context The active run context.
+ * @param {*} value The action's result.
+ * @param {string} [bucket] The `results` key to file `value` under, for a result that isn't a plain object of named values.
+ */
+export function setResult(context, value, bucket) {
+  context.previous = value;
+  if (bucket) context.results[bucket] = value;
+  else if (value && typeof value === 'object' && !Array.isArray(value)) Object.assign(context.results, value);
+}
+
+/**
+ * Resolve a `{{path}}` expression path against a run context, with `info`'s contents exposed at the top level (e.g. `event.name`, not `info.event.name`) and the triggering event's own payload exposed at the top level too (e.g. `token.name`, not `event.data.token.name`). `[0]` index segments read as plain steps.
  * @param {RunContext} context The active run context.
  * @param {string} path A dotted path.
  * @returns {*} The resolved value.
  */
 export function resolvePath(context, path) {
-  return foundry.utils.getProperty({ ...context.info, ...context.info.event?.data, ...context }, path);
+  const normalized = path.replace(/\.?\[(\d+)\]/g, '.$1').replace(/^\./, '');
+  return foundry.utils.getProperty({ ...context.info, ...context.info.event?.data, ...context }, normalized);
 }
 
 /**
@@ -56,4 +74,18 @@ export function interpolate(text, context) {
     const value = resolvePath(context, path);
     return value === undefined || value === null ? '' : String(value);
   });
+}
+
+/**
+ * Resolve a numeric text field: `{{path}}` placeholders first, then a dice formula.
+ * @param {string} text The template or formula.
+ * @param {RunContext} context The active run context.
+ * @returns {Promise<number|null>} The number, or null when the field is empty.
+ */
+export async function resolveNumber(text, context) {
+  const resolved = String(interpolate(text, context) ?? '').trim();
+  if (!resolved) return null;
+  if (Number.isFinite(Number(resolved))) return Number(resolved);
+  const roll = await new Roll(resolved).evaluate();
+  return roll.total;
 }

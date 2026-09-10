@@ -1,4 +1,5 @@
 import { MODULE } from '../constants.mjs';
+import { listResolvers } from '../targeting.mjs';
 import { applyTemplate, listTemplates, saveTemplate } from '../templates.mjs';
 import { Combobox } from './combobox.mjs';
 import { buildTree } from './program-tree-builder.mjs';
@@ -104,6 +105,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
         index,
         name: entry.name,
         error: entry.error ?? null,
+        userName: game.users.get(entry.userId)?.name ?? null,
         timeLabel: foundry.utils.timeSince(new Date(entry.time))
       }))
       .reverse();
@@ -210,6 +212,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       history.splice(Number(index), 1);
       return this.document.setFlag(MODULE.ID, 'history', history);
     }
+    if (lineAction === 'reset-history') return this.#resetHistory();
     if (lineAction === 'delete-variable') {
       const variables = this.document.getFlag(MODULE.ID, 'variables') ?? [];
       variables.splice(Number(index), 1);
@@ -224,6 +227,17 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       this.#pendingTrees.clear();
       return this.render({ parts: ['general', 'program'] });
     }
+  }
+
+  /** Clear the fire log and the attempt counter, after confirmation. */
+  async #resetHistory() {
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: 'GLYPH.HISTORY.resetTitle' },
+      content: `<p>${game.i18n.localize('GLYPH.HISTORY.resetPrompt')}</p>`
+    });
+    if (!confirmed) return;
+    await this.document.update({ [`flags.${MODULE.ID}.history`]: [], [`flags.${MODULE.ID}.triggerCount`]: 0 });
+    return this.render({ parts: ['history'] });
   }
 
   /** Add or overwrite a persistent variable from the Variables tab's input row, upserting by name. */
@@ -273,6 +287,12 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       const uuid = target.value || null;
       return this.document.update({ 'system.linkedTile': uuid ? { kind: 'uuid', value: uuid } : null });
     }
+    if (target.matches('.glyph-point-mode')) {
+      event.stopPropagation();
+      const basePath = target.dataset.path.replace(/\.kind$/, '');
+      await this.#mutateHandler((tree) => foundry.utils.setProperty(tree, basePath, target.value ? { kind: 'uuid', value: '' } : { x: 0, y: 0, elevation: 0 }));
+      return this.render({ parts: ['program'] });
+    }
     if (target.matches('.glyph-ref-kind')) await this.#syncReferenceKind(target);
     const { path, widget, numeric } = target.dataset;
     if (!path) return;
@@ -309,11 +329,12 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     const basePath = select.dataset.path.replace(/\.kind$/, '');
     const hint = select.closest('.glyph-node-field')?.querySelector('.hint');
     if (hint) hint.textContent = _loc(`GLYPH.REFERENCE_KIND_HINT.${kind}`);
-    const partial = kind === 'context' ? 'reference-value-context' : kind === 'uuid' ? 'reference-value-uuid' : null;
+    const partial = { context: 'reference-value-context', uuid: 'reference-value-uuid', tag: 'reference-value-tag', collection: 'reference-value-collection' }[kind] ?? null;
     const replacement = partial
       ? await foundry.applications.handlebars.renderTemplate(`modules/${MODULE.ID}/templates/partials/${partial}.hbs`, {
           path: `${basePath}.value`,
-          documentType: wrap.dataset.documentType ?? ''
+          documentType: wrap.dataset.documentType ?? '',
+          resolvers: listResolvers()
         })
       : '';
     const valueField = wrap.querySelector('[data-field="value"]');

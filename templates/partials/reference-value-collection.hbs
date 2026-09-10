@@ -1,0 +1,5 @@
+<select data-path="{{path}}" data-field="value">
+  {{#each resolvers}}
+    <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+  {{/each}}
+</select>

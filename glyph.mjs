@@ -30,10 +30,12 @@ import { registerBondsmithIntegration } from './scripts/integrations/bondsmith.m
 import { registerCalendariaIntegration } from './scripts/integrations/calendaria.mjs';
 import { registerHeroMancerIntegration } from './scripts/integrations/hero-mancer.mjs';
 import { registerPeddlerIntegration } from './scripts/integrations/peddler.mjs';
+import { registerManualTriggerHud } from './scripts/manual-trigger.mjs';
 import { registerPseudoEvents } from './scripts/pseudo-events.mjs';
 import { registerQuickCreate } from './scripts/quick-create.mjs';
 import { registerRecipesButton } from './scripts/recipes.mjs';
 import { registerReferenceRemap } from './scripts/reference-remap.mjs';
+import { registerRotationAnimation } from './scripts/rotation-animation.mjs';
 import { registerTileLink } from './scripts/tile-link.mjs';
 import { registerTriggerLinkEnricher } from './scripts/trigger-link-enricher.mjs';
 import './styles/glyph.css';
@@ -49,7 +51,9 @@ Hooks.once('init', () => {
   registerTriggerBehavior();
   registerTriggerSheet();
   registerPseudoEvents();
+  registerManualTriggerHud();
   registerTileLink();
+  registerRotationAnimation();
   registerReferenceRemap();
   registerRecipesButton();
   registerMattImportContextMenu();

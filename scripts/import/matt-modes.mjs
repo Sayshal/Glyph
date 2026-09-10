@@ -3,53 +3,72 @@
  * @property {string[]} [events] Core `RegionEvent` names this mode maps to.
  * @property {string[]} [pseudoEvents] Glyph pseudo-event names this mode maps to.
  * @property {string} [note] Present when the mapping is approximate, not exact.
- * @property {boolean} [manual] True when this mode has no usable glyph equivalent at all.
+ * @property {boolean} [manual] True when no handler should be wired for this mode. Any `events`/`pseudoEvents` still name what a `method` filter on it should test.
+ * @property {string} [gate] A condition expression the wired handler is wrapped in, for a mode narrower than the core event it maps to.
+ * @property {string} [handler] A handler key the chain is written to instead of an event handler, for a mode fired on demand rather than by an event.
  */
 
 /** @type {Record<string, ModeMapping>} */
 export const MODE_MAP = {
   enter: { events: ['tokenEnter'] },
-  create: { events: ['tokenEnter'], note: 'Core already fires tokenEnter for a token created inside the Region, folding MATT\'s separate "create" mode in.' },
+  create: { pseudoEvents: ['tokenCreated'] },
   exit: { events: ['tokenExit'] },
+  both: { events: ['tokenEnter', 'tokenExit'] },
   movement: {
     events: ['tokenMoveWithin'],
-    note: 'Closest core equivalent; MATT\'s "movement" also fires on a segment merely crossing the tile, which tokenMoveWithin does not distinguish from ending inside it.'
+    note: 'MATT fires when a token that was already inside the tile changes x/y, which is what tokenMoveWithin covers; tokenMoveWithin also covers a move that only changes elevation.'
   },
   stop: {
-    manual: true,
-    note: 'MATT fires when movement *ends* inside the tile - no core Region event distinguishes "ended here" from "passing through" (tokenMoveWithin/tokenEnter are the closest, already mapped to other modes).'
+    events: ['tokenMoveIn', 'tokenMoveWithin'],
+    gate: 'movementEnded()',
+    note: 'MATT fires only when movement *ends* inside the tile, which no core Region event distinguishes on its own, so the handler is gated on movementEnded(). MATT also drops the trigger when the path crosses the tile boundary more than once; glyph does not.'
   },
-  elevation: { events: ['tokenMoveWithin'], note: "Core folds elevation changes into its general move events; there is no elevation-specific Region event to isolate MATT's narrower case." },
-  rotation: { manual: true, note: 'Token rotation does not trigger any core Region event.' },
+  elevation: { events: ['tokenMoveWithin'], gate: 'elevationChanged()' },
+  rotation: { pseudoEvents: ['tokenRotated'] },
   click: { pseudoEvents: ['click'] },
   rightclick: { pseudoEvents: ['rightclick'] },
   dblclick: { pseudoEvents: ['dblclick'] },
-  dblrightclick: { manual: true, note: 'Glyph has no double-right-click pseudo-event.' },
+  dblrightclick: { pseudoEvents: ['dblrightclick'] },
   hoverin: { pseudoEvents: ['hoverIn'] },
   hoverout: { pseudoEvents: ['hoverOut'] },
-  combatstart: { manual: true, note: 'Global combat-lifecycle event, not scoped to a Region; glyph only exposes per-token round/turn events.' },
-  combatend: { manual: true, note: 'Same as combatstart.' },
-  round: { events: ['tokenRoundStart'] },
-  turn: { events: ['tokenTurnStart'] },
-  turnend: { events: ['tokenTurnEnd'] },
-  ready: { manual: true, note: 'Fires once per client on canvas load; glyph has no equivalent (a Region trigger only runs off a real event).' },
-  manual: { manual: true, note: "MATT's tile-HUD power button. Use glyph's manual trigger API instead of an event handler." },
+  hover: { pseudoEvents: ['hoverIn', 'hoverOut'] },
+  combatstart: {
+    pseudoEvents: ['combatStart'],
+    note: 'MATT hands the trigger every combatant as its token list and fires once per connected GM; glyph fires the Region once, with no triggering token, so a converted chain that acted on the token needs a collection to work over.'
+  },
+  combatend: {
+    pseudoEvents: ['combatEnd'],
+    note: 'Same as combatstart.'
+  },
+  round: { pseudoEvents: ['combatRound'] },
+  turn: {
+    pseudoEvents: ['combatTurnStart'],
+    note: 'MATT fires at most one of round/turn/combatstart per combat update, round first, so a tile set to both round and turn ran only its round pass; glyph fires each subscribed event.'
+  },
+  turnend: { pseudoEvents: ['combatTurnEnd'] },
+  ready: {
+    pseudoEvents: ['canvasReady'],
+    note: 'MATT runs this on every client that loads the scene; glyph runs it once, when the primary GM loads it, so a converted chain that did per-client work has to target an audience explicitly.'
+  },
+  manual: {
+    manual: true,
+    pseudoEvents: ['manual'],
+    handler: 'manual',
+    note: 'MATT\'s tile-HUD power button. The chain is written to the "manual" handler, fired by the Tile HUD power button or by GLYPH.runTrigger(behaviorUuid).'
+  },
   door: {
     pseudoEvents: ['doorOpened', 'doorClosed', 'doorLocked', 'doorUnlocked'],
-    note: 'MATT\'s single "door" mode does not distinguish open/close/lock/unlock; all four glyph pseudo-events are wired to the same converted handler.'
+    note: 'MATT opts into the door trigger per wall, each wall naming its tile and enabling its own transitions; no wall on this scene named this Tile, so all four glyph pseudo-events are wired to the same converted handler. Glyph also fires on a programmatic door change, where MATT only fires on a click of the door control.'
   },
   darkness: { pseudoEvents: ['darknessChanged'] },
-  lighting: {
-    pseudoEvents: ['darknessChanged'],
-    note: 'MATT distinguishes the raw scene darkness setting ("darkness") from the computed canvas value ("lighting"); glyph exposes only one darknessChanged pseudo-event.'
-  },
+  lighting: { pseudoEvents: ['canvasDarknessChanged'] },
   time: { pseudoEvents: ['worldTimeChanged'] },
   region: {
     manual: true,
-    note: "MATT's own Region-Behavior integration mode (used when a Region already drives the tile) - the tile is already effectively glyph-shaped; review by hand rather than converting."
+    note: 'MATT\'s own Region-Behavior integration mode, emitted at run time rather than chosen in the When list. The events of any MATT triggerTile behavior naming this Tile are carried onto the converted Region, but a method test against "region" itself cannot be reproduced.'
   },
   trigger: {
     manual: true,
-    note: "Invoked externally via MATT's triggerTile(uuid) API/@Tile[] link, bypassing this tile's own When list - not a mode to convert on its own; see the `triggertile` action-map entry."
+    note: 'Invoked externally via MATT\'s triggerTile(uuid) API/@Tile[] link, bypassing this tile\'s own When list - not a mode to convert on its own. Every converted tile keeps an ungated "onDemand" handler a trigger node, an @Trigger link or GLYPH.runTrigger runs; see the `trigger` action-map entry.'
   }
 };
