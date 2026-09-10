@@ -320,6 +320,11 @@
     }
   }
 
+  .glyph-history-reset {
+    width: auto;
+    margin-top: 0.5rem;
+  }
+
   .glyph-history-list {
     gap: 0.125rem;
     display: flex;
@@ -349,6 +354,11 @@
 
       .glyph-history-name {
         font-weight: 600;
+      }
+
+      .glyph-history-user {
+        opacity: 0.75;
+        font-size: var(--font-size-11, 0.6875rem);
       }
 
       .glyph-history-error {
@@ -442,26 +452,26 @@
 
   .glyph-recipe-picker-body {
     gap: 0.6rem;
+    scrollbar-gutter: stable both-edges;
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
     overflow-y: auto;
-    scrollbar-gutter: stable both-edges;
 
     .glyph-recipe-search {
       gap: 0.5rem;
       display: flex;
+      z-index: 1;
       position: sticky;
       top: 0;
-      z-index: 1;
       flex: none;
       align-items: center;
       padding: 0.4rem 0.6rem;
       border: 0.0625rem solid var(--atlas-border);
       border-radius: 0.35rem;
-      background: var(--atlas-bg-lighter);
       color: var(--atlas-text-dim);
+      background: var(--atlas-bg-lighter);
       transition: border-color 0.15s ease;
 
       &:focus-within {
@@ -473,9 +483,9 @@
       flex: 1 1 auto;
       border: none;
       outline: none;
-      background: transparent;
       color: var(--atlas-text);
       font-size: 0.8rem;
+      background: transparent;
 
       &::placeholder {
         color: var(--atlas-text-dim);
@@ -489,8 +499,8 @@
 
     .glyph-recipe-grid {
       gap: 0.5rem;
-      display: grid;
       grid-template-columns: repeat(2, 1fr);
+      display: grid;
       align-content: start;
     }
 
@@ -520,20 +530,20 @@
     }
 
     .glyph-recipe-badge {
-      width: 1.6rem;
-      height: 1.6rem;
       display: flex;
       flex: none;
-      align-items: center;
       justify-content: center;
+      align-items: center;
+      width: 1.6rem;
+      height: 1.6rem;
       border-radius: 0.3rem;
-      background: var(--atlas-selected-bg);
       color: var(--atlas-accent);
       font-size: 0.75rem;
+      background: var(--atlas-selected-bg);
 
       &.glyph-recipe-badge-hazard {
-        background: var(--atlas-error-bg);
         color: var(--atlas-error);
+        background: var(--atlas-error-bg);
       }
     }
 
@@ -543,11 +553,12 @@
     }
 
     .glyph-recipe-card .hint {
-      -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
       display: -webkit-box;
-      overflow: hidden;
       margin: 0;
+      overflow: hidden;
       color: var(--atlas-text-dim);
       font-size: 0.72rem;
       line-height: 1.4;
@@ -555,8 +566,8 @@
 
     .glyph-recipe-card-foot {
       display: flex;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
       margin-top: auto;
 
       button {
@@ -568,8 +579,8 @@
     .glyph-recipe-cat {
       color: var(--atlas-text-dim);
       font-size: 0.62rem;
-      letter-spacing: 0.03em;
       text-transform: uppercase;
+      letter-spacing: 0.03em;
     }
   }
 
@@ -586,7 +597,7 @@
     }
   }
 
-  .glyph-point {
+  .glyph-point-coordinates {
     gap: 0.5rem;
     display: flex;
     align-items: center;
@@ -599,7 +610,7 @@
     align-items: stretch;
   }
 
-  .glyph-point label {
+  .glyph-point-coordinates label {
     gap: 0.25rem;
     display: flex;
     align-items: center;
@@ -632,6 +643,7 @@
     display: flex;
     flex-direction: column;
     max-height: 24rem;
+    overflow-y: auto;
   }
 
   .glyph-import-clean-row {
@@ -658,8 +670,8 @@
       gap: 0.5rem;
       display: flex;
       align-items: center;
-      cursor: pointer;
       list-style: none;
+      cursor: pointer;
 
       &::-webkit-details-marker {
         display: none;
@@ -679,13 +691,13 @@
     text-transform: uppercase;
 
     &.glyph-import-manual {
-      background: var(--atlas-error-bg);
       color: var(--atlas-error);
+      background: var(--atlas-error-bg);
     }
 
     &.glyph-import-partial {
-      background: color-mix(in srgb, var(--atlas-warning) 16%, transparent);
       color: var(--atlas-warning);
+      background: color-mix(in srgb, var(--atlas-warning) 16%, transparent);
     }
   }
 

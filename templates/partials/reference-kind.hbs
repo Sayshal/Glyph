@@ -1,0 +1,19 @@
+<select data-path="{{path}}.kind" data-field="kind" class="glyph-ref-kind">
+  <option value="uuid" {{#if (eq refKind "uuid")}}selected{{/if}}>{{localize "GLYPH.REFERENCE_KIND.uuid"}}</option>
+  <option value="triggerToken" {{#if (eq refKind "triggerToken")}}selected{{/if}}>
+    {{localize "GLYPH.REFERENCE_KIND.triggerToken"}}
+  </option>
+  <option value="triggerActor" {{#if (eq refKind "triggerActor")}}selected{{/if}}>
+    {{localize "GLYPH.REFERENCE_KIND.triggerActor"}}
+  </option>
+  <option value="tag" {{#if (eq refKind "tag")}}selected{{/if}}>{{localize "GLYPH.REFERENCE_KIND.tag"}}</option>
+  <option value="collection" {{#if (eq refKind "collection")}}selected{{/if}}>
+    {{localize "GLYPH.REFERENCE_KIND.collection"}}
+  </option>
+  <option value="context" {{#if (eq refKind "context")}}selected{{/if}}>
+    {{localize "GLYPH.REFERENCE_KIND.context"}}
+  </option>
+  <option value="linkedTile" {{#if (eq refKind "linkedTile")}}selected{{/if}}>
+    {{localize "GLYPH.REFERENCE_KIND.linkedTile"}}
+  </option>
+</select>

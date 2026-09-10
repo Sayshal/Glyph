@@ -9,9 +9,9 @@ export function registerPf2eActions() {
   /** `CreaturePF2e#rollAbilityCheck`/`#rollSavingThrow` */
   registerAbilityTestAdapter(
     'pf2e',
-    async (actor, type, ability, dc) => {
+    async (actor, type, ability, dc, prompt) => {
       const method = type === 'check' ? 'rollAbilityCheck' : 'rollSavingThrow';
-      const roll = await actor[method]?.({ ability, dc, skipDialog: true });
+      const roll = await actor[method]?.({ ability, dc, skipDialog: !prompt });
       return roll ? roll.degreeOfSuccess >= 2 : null;
     },
     CONFIG.PF2E.abilities
@@ -20,8 +20,8 @@ export function registerPf2eActions() {
   /** `CreaturePF2e#skills[slug].check.roll` */
   registerSkillTestAdapter(
     'pf2e',
-    async (actor, skill, dc) => {
-      const roll = await actor.skills?.[skill]?.check?.roll({ dc, skipDialog: true });
+    async (actor, skill, dc, prompt) => {
+      const roll = await actor.skills?.[skill]?.check?.roll({ dc, skipDialog: !prompt });
       return roll ? roll.degreeOfSuccess >= 2 : null;
     },
     Object.fromEntries(Object.entries(CONFIG.PF2E.skills).map(([key, { label }]) => [key, label]))
@@ -30,11 +30,11 @@ export function registerPf2eActions() {
   /** `CreaturePF2e#applyDamage` */
   registerHurtHealAdapter(
     'pf2e',
-    async (actor, formula, damageType, postCard) => {
+    async (actor, formula, { damageType, postCard, rollMode }) => {
       const token = actor.getActiveTokens()[0]?.document ?? null;
       const DamageRoll = CONFIG.Dice.rolls.find((cls) => cls.name === 'DamageRoll');
-      const roll = damageType ? await new DamageRoll(`${formula}[${damageType}]`).evaluate() : await new Roll(formula).evaluate();
-      if (postCard) await roll.toMessage({ speaker: ChatMessage.getSpeaker({ token }) });
+      const roll = damageType ? await new DamageRoll(`${formula}[${damageType}]`).evaluate() : await new Roll(formula, actor.getRollData()).evaluate();
+      if (postCard) await roll.toMessage({ speaker: ChatMessage.getSpeaker({ token }) }, { rollMode: rollMode || undefined });
       if (!damageType) return actor.applyDamage({ damage: roll.total, token, skipIWR: true });
       await actor.applyDamage({ damage: roll, token, skipIWR: false });
     },

@@ -1,11 +1,25 @@
 import { MODULE } from '../constants.mjs';
-import { resolveCollection } from '../targeting.mjs';
+import { activeRuns } from '../run-context.mjs';
+import { resolveCollection, resolveReference } from '../targeting.mjs';
 import { runNode } from './executor.mjs';
 import { evaluateCondition } from './expression.mjs';
 import { getNodeType, registerNodeType } from './registry.mjs';
 
 /** @type {number} Hard cap on forEach iterations, so a bad collection can't hang a run. */
 const MAX_ITERATIONS = 1000;
+
+/**
+ * Fisher-Yates shuffle, in place.
+ * @param {object[]} items The list to shuffle.
+ * @returns {object[]} `items`, shuffled.
+ */
+function shuffle(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+}
 
 /**
  * Narrow a resolved item list to exactly one item, per forEach's `pick` mode.
@@ -75,15 +89,15 @@ registerNodeType('sequence', {
   async execute(node, context) {
     let i = 0;
     while (i < node.children.length) {
-      if (context.control.stopped) return;
-      await runNode(node.children[i], context);
+      if (context.control.stopped || context.control.skip) return;
       if (context.control.goto) {
         const target = node.children.findIndex((c) => c.type === 'landing' && c.tag === context.control.goto);
         if (target === -1) return;
         context.control.goto = null;
-        i = target;
+        i = target + 1;
         continue;
       }
+      await runNode(node.children[i], context);
       i++;
     }
   }
@@ -104,7 +118,7 @@ registerNodeType('if', {
     if (node.else !== undefined) requireNodeArray(node.else, 'if.else');
   },
   async execute(node, context) {
-    const branch = evaluateCondition(node.condition, context) ? node.then : (node.else ?? []);
+    const branch = (await evaluateCondition(node.condition, context)) ? node.then : (node.else ?? []);
     await runNode({ type: 'sequence', children: branch }, context);
   }
 });
@@ -116,6 +130,7 @@ registerNodeType('forEach', {
   hint: 'GLYPH.NODES.forEach.hint',
   fields: [
     { name: 'collection', widget: 'resolverSelect', label: 'GLYPH.NODES.forEach.FIELDS.collection.label', required: true },
+    { name: 'randomize', widget: 'boolean', label: 'GLYPH.NODES.forEach.FIELDS.randomize.label', hint: 'GLYPH.NODES.forEach.FIELDS.randomize.hint' },
     { name: 'filter', widget: 'expression', label: 'GLYPH.NODES.forEach.FIELDS.filter.label', hint: 'GLYPH.NODES.forEach.FIELDS.filter.hint' },
     { name: 'limit', widget: 'number', min: 0, label: 'GLYPH.NODES.forEach.FIELDS.limit.label', hint: 'GLYPH.NODES.forEach.FIELDS.limit.hint' },
     {
@@ -145,12 +160,23 @@ registerNodeType('forEach', {
   },
   async execute(node, context) {
     let items = resolveCollection(node.collection, context);
-    if (node.filter) items = items.filter((item) => evaluateCondition(node.filter, { ...context, item }));
+    if (node.randomize) items = shuffle([...items]);
+    if (node.filter) {
+      const kept = await Promise.all(items.map((item) => evaluateCondition(node.filter, { ...context, item })));
+      items = items.filter((_item, i) => kept[i]);
+    }
     if (node.pick && node.pick !== 'all') items = pickOne(items, node.pick, node.pickPath, node.pickIndex);
     else if (node.limit > 0) items = items.slice(0, node.limit);
-    for (const item of items.slice(0, MAX_ITERATIONS)) {
-      if (context.control.stopped || context.control.goto) return;
-      await runNode({ type: 'sequence', children: node.body }, { ...context, item });
+    const sliced = items.slice(0, MAX_ITERATIONS);
+    const bodyType = node.body.length === 1 ? getNodeType(node.body[0].type) : null;
+    if (bodyType?.batchExecute && sliced.length && !context.control.stopped && !context.control.goto) {
+      await bodyType.batchExecute(sliced.map((item) => ({ node: node.body[0], context: { ...context, item } })));
+    } else {
+      for (const item of sliced) {
+        if (context.control.stopped || context.control.goto) return;
+        await runNode({ type: 'sequence', children: node.body }, { ...context, item });
+        context.control.skip = false;
+      }
     }
     if (items.length > MAX_ITERATIONS) ATLAS.log(2, `forEach over "${node.collection}" truncated at ${MAX_ITERATIONS} of ${items.length} items.`);
   }
@@ -183,11 +209,16 @@ registerNodeType('landing', {
   category: 'structural',
   label: 'GLYPH.NODES.landing.label',
   hint: 'GLYPH.NODES.landing.hint',
-  fields: [{ name: 'tag', widget: 'text', label: 'GLYPH.NODES.landing.FIELDS.tag.label', required: true }],
+  fields: [
+    { name: 'tag', widget: 'text', label: 'GLYPH.NODES.landing.FIELDS.tag.label', required: true },
+    { name: 'stop', widget: 'boolean', label: 'GLYPH.NODES.landing.FIELDS.stop.label', hint: 'GLYPH.NODES.landing.FIELDS.stop.hint' }
+  ],
   validate(node) {
     if (typeof node.tag !== 'string' || !node.tag) throw new Error('landing.tag must be a non-empty string.');
   },
-  async execute() {}
+  async execute(node, context) {
+    if (node.stop) context.control.stopped = true;
+  }
 });
 
 registerNodeType('call', {
@@ -201,7 +232,7 @@ registerNodeType('call', {
   async execute(node, context) {
     const target = context.info.behavior?.system?.handlers?.[node.handler];
     if (!target) return;
-    await runNode(target, { ...context, control: { stopped: false, goto: null, pause: false } });
+    await runNode(target, { ...context, control: { stopped: false, skip: false, goto: null, pause: false } });
   }
 });
 
@@ -214,9 +245,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** @type {RegExp} A `low-high` range, matched on a formula entry after the comma split. */
+const WAIT_RANGE = /^(-?\d*\.?\d+)\s*-\s*(-?\d*\.?\d+)$/;
+
 /**
- * Resolve a wait node's delay: a plain `seconds` number, or a `formula` - a dice roll, a comma-list of
- * seconds/dice picked at random, or both.
+ * Resolve a wait node's delay: a plain `seconds` number, or one entry of a comma-separated `formula`.
  * @param {object} node The wait node.
  * @returns {Promise<number>} The resolved delay, in seconds.
  */
@@ -229,6 +262,11 @@ async function resolveWaitSeconds(node) {
   const picked = options.length > 1 ? options[Math.floor(Math.random() * options.length)] : options[0];
   if (!picked) return node.seconds ?? 0;
   if (/^-?\d+(\.\d+)?$/.test(picked)) return Number(picked);
+  const range = picked.match(WAIT_RANGE);
+  if (range) {
+    const [low, high] = [Number(range[1]), Number(range[2])].sort((a, b) => a - b);
+    return Math.random() * (high - low) + low;
+  }
   const roll = await new Roll(picked).evaluate();
   return roll.total;
 }
@@ -249,11 +287,27 @@ registerNodeType('wait', {
   }
 });
 
+registerNodeType('nextItem', {
+  category: 'flow',
+  label: 'GLYPH.NODES.nextItem.label',
+  hint: 'GLYPH.NODES.nextItem.hint',
+  execute(_node, context) {
+    context.control.skip = true;
+  }
+});
+
 registerNodeType('stopActions', {
   category: 'flow',
   label: 'GLYPH.NODES.stopActions.label',
   hint: 'GLYPH.NODES.stopActions.hint',
-  async execute(_node, context) {
-    context.control.stopped = true;
+  fields: [{ name: 'behavior', widget: 'reference', label: 'GLYPH.NODES.stopActions.FIELDS.behavior.label', hint: 'GLYPH.NODES.stopActions.FIELDS.behavior.hint' }],
+  async execute(node, context) {
+    if (!('behavior' in node)) {
+      context.control.stopped = true;
+      return;
+    }
+    const target = resolveReference(node.behavior, context);
+    const run = target instanceof RegionBehavior ? activeRuns.get(target.uuid) : null;
+    if (run) run.control.stopped = true;
   }
 });

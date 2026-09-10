@@ -331,7 +331,7 @@ export const EXAMPLE_TRIGGERS = [
     category: 'tile',
     handlerEvent: 'tokenEnter',
     events: ['tokenEnter'],
-    body: { type: 'toggleTileVisibility', tile: TILE_REF, hidden: false }
+    body: { type: 'toggleTileVisibility', tile: TILE_REF, mode: 'show' }
   }),
   example({
     id: 'setTileOcclusion',

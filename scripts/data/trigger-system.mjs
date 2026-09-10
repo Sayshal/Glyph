@@ -22,5 +22,19 @@ export const seq = (...children) => ({ type: 'sequence', children });
 export function buildTriggerSystem({ events = [], pseudoEvents = [], handlers }) {
   const wrapped = {};
   for (const [event, body] of Object.entries(handlers)) wrapped[event] = body.type === 'sequence' ? body : seq(body);
-  return { events, pseudoEvents, restriction: 'all', chance: 100, minRequired: 1, cooldown: 0, pertoken: false, vision: false, allowPaused: false, linkedTile: null, handlers: wrapped };
+  return {
+    events,
+    pseudoEvents,
+    userRestriction: 'all',
+    tokenRestriction: 'all',
+    chance: 100,
+    minRequired: 1,
+    cooldown: 0,
+    pertoken: false,
+    vision: false,
+    allowPaused: false,
+    traceAlpha: false,
+    linkedTile: null,
+    handlers: wrapped
+  };
 }

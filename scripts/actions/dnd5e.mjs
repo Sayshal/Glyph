@@ -2,7 +2,20 @@ import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
 import { registerHurtHealAdapter } from '../hurt-heal-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
-import { resolveActorReference } from '../targeting.mjs';
+import { resolveActorReference, resolveReference } from '../targeting.mjs';
+
+/**
+ * Whether an attack roll beat the target's AC. A target with no readable AC counts as a hit; a cancelled roll does not.
+ * @param {Roll[]|null} rolls The attack rolls.
+ * @param {Token|null} targetToken The targeted token.
+ * @returns {boolean} True when damage should follow.
+ */
+function attackHits(rolls, targetToken) {
+  if (!rolls?.length) return false;
+  const ac = targetToken?.actor?.system?.attributes?.ac?.value;
+  if (typeof ac !== 'number') return true;
+  return rolls.some((roll) => roll.isCritical || roll.total >= ac);
+}
 
 /** dnd5e-only */
 export function registerDnd5eActions() {
@@ -11,9 +24,9 @@ export function registerDnd5eActions() {
   /** `Actor5e#rollSavingThrow`/`#rollAbilityCheck` */
   registerAbilityTestAdapter(
     'dnd5e',
-    async (actor, type, ability, dc) => {
+    async (actor, type, ability, dc, prompt) => {
       const method = type === 'check' ? 'rollAbilityCheck' : 'rollSavingThrow';
-      const rolls = await actor[method]({ ability, target: dc }, { configure: false }, {});
+      const rolls = await actor[method]({ ability, target: dc }, { configure: !!prompt }, {});
       const roll = rolls?.[0];
       return roll ? roll.total >= dc : null;
     },
@@ -23,8 +36,8 @@ export function registerDnd5eActions() {
   /** `Actor5e#rollSkill` */
   registerSkillTestAdapter(
     'dnd5e',
-    async (actor, skill, dc) => {
-      const rolls = await actor.rollSkill({ skill, target: dc }, { configure: false }, {});
+    async (actor, skill, dc, prompt) => {
+      const rolls = await actor.rollSkill({ skill, target: dc }, { configure: !!prompt }, {});
       const roll = rolls?.[0];
       return roll ? roll.total >= dc : null;
     },
@@ -38,7 +51,9 @@ export function registerDnd5eActions() {
     fields: [
       { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.actor.label', required: true },
       { name: 'itemId', widget: 'text', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.itemId.label', hint: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.itemId.hint', required: true },
+      { name: 'target', widget: 'reference', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.target.label', hint: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.target.hint' },
       { name: 'chatCard', widget: 'boolean', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.chatCard.label' },
+      { name: 'cardOnly', widget: 'boolean', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.cardOnly.label', hint: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.cardOnly.hint' },
       { name: 'fastForward', widget: 'boolean', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.fastForward.label', hint: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.fastForward.hint' },
       { name: 'rollDamage', widget: 'boolean', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.rollDamage.label' },
       { name: 'rollMode', widget: 'rollMode', label: 'GLYPH.ACTIONS.dnd5eAttack.FIELDS.rollMode.label' }
@@ -50,24 +65,34 @@ export function registerDnd5eActions() {
     async execute(node, context) {
       const actor = resolveActorReference(node.actor, context);
       const item = actor?.items.get(node.itemId);
-      const activity = item?.system.activities?.getByType?.('attack')?.[0];
-      if (!activity) return;
+      if (!item) return;
+      const target = node.target ? resolveReference(node.target, context) : null;
+      const targetToken = target instanceof TokenDocument ? target.object : target instanceof Token ? target : null;
+      targetToken?.setTarget(true, { releaseOthers: true });
       const message = { create: node.chatCard !== false };
       if (node.rollMode) message.rollMode = node.rollMode;
-      await activity.use({}, { configure: node.fastForward === false }, message);
-      if (node.rollDamage) await activity.rollDamage({ event: context.info.event }, {}, message);
+      const dialog = { configure: node.fastForward === false };
+      const activity = item.system.activities?.getByType?.('attack')?.[0];
+      if (!activity) {
+        await item.use({}, dialog, message);
+        return;
+      }
+      const results = await activity.use({ subsequentActions: false }, dialog, message);
+      if (!results || node.cardOnly) return;
+      const rolls = await activity.rollAttack({ event: context.info.event }, {}, { data: { system: { origin: results.message?.id } } });
+      if (node.rollDamage && attackHits(rolls, targetToken)) await activity.rollDamage({ event: context.info.event }, {}, message);
     }
   });
 
   /** `Actor5e#applyDamage(damages)` */
   registerHurtHealAdapter(
     'dnd5e',
-    async (actor, formula, damageType, postCard) => {
-      const roll = damageType ? new CONFIG.Dice.DamageRoll(formula, actor.getRollData(), { type: damageType }) : new Roll(formula);
+    async (actor, formula, { damageType, postCard, rollMode }) => {
+      const roll = damageType ? new CONFIG.Dice.DamageRoll(formula, actor.getRollData(), { type: damageType }) : new Roll(formula, actor.getRollData());
       await roll.evaluate();
       if (postCard) {
         const typeLabel = CONFIG.DND5E.damageTypes[damageType]?.label ?? CONFIG.DND5E.healingTypes[damageType]?.label;
-        await roll.toMessage({ flavor: typeLabel ? _loc(typeLabel) : undefined, speaker: ChatMessage.getSpeaker({ actor }) });
+        await roll.toMessage({ flavor: typeLabel ? _loc(typeLabel) : undefined, speaker: ChatMessage.getSpeaker({ actor }) }, { rollMode: rollMode || undefined });
       }
       const damages = damageType ? [{ value: roll.total, type: damageType }] : roll.total;
       await actor.applyDamage(damages);

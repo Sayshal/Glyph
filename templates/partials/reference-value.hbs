@@ -1,0 +1,9 @@
+{{#if (eq refKind "context")}}
+  {{> "modules/glyph/templates/partials/reference-value-context.hbs" path=refValuePath value=refValue}}
+{{else if (eq refKind "uuid")}}
+  {{> "modules/glyph/templates/partials/reference-value-uuid.hbs" path=refValuePath documentType=documentType value=refValue}}
+{{else if (eq refKind "tag")}}
+  {{> "modules/glyph/templates/partials/reference-value-tag.hbs" path=refValuePath value=refValue}}
+{{else if (eq refKind "collection")}}
+  {{> "modules/glyph/templates/partials/reference-value-collection.hbs" path=refValuePath resolvers=refResolvers}}
+{{/if}}

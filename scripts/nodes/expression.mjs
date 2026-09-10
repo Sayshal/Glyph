@@ -2,6 +2,7 @@ import { isModuleActive } from '../capability.mjs';
 import { MODULE } from '../constants.mjs';
 import { resolvePath } from '../run-context.mjs';
 import { resolveCollection, resolveReference, toActor } from '../targeting.mjs';
+import { toTriggerBehavior } from '../tile-link.mjs';
 
 /**
  * Grid distance between two points, in scene distance units.
@@ -44,6 +45,28 @@ function hasCondition(actor, statusId) {
 }
 
 /**
+ * Whether the run's movement event ended inside the triggering Region, rather than passing through it.
+ * @param {object} context The active run context.
+ * @returns {boolean}
+ */
+function movementEndedInside(context) {
+  const { token, movement } = context.info.event?.data ?? {};
+  if (!token || !movement) return false;
+  return !movement.pending.waypoints.length && !!context.info.region?.testPoint(token.getCenterPoint(movement.destination));
+}
+
+/**
+ * Whether the event's movement changed the token's elevation.
+ * @param {object} context The active run context.
+ * @returns {boolean}
+ */
+function movementChangedElevation(context) {
+  const { movement } = context.info.event?.data ?? {};
+  if (!movement) return false;
+  return movement.origin.elevation !== movement.destination.elevation;
+}
+
+/**
  * Whether a ray between two points is unobstructed by a sight-blocking wall.
  * @param {Point} a The origin point.
  * @param {Point} b The destination point.
@@ -63,7 +86,8 @@ const OPERATORS = {
   '<': (a, b) => Number(a) < Number(b)
 };
 
-const OPERATOR_PATTERN = /\s*(==|!=|>=|<=|>|<)\s*/;
+/** @type {string[]} Comparison operators, longest first so `>=` is found before `>`. */
+const OPERATOR_KEYS = Object.keys(OPERATORS);
 
 /**
  * A TokenDocument, Region (or other placeable-backed document), or plain point reference to a measurable point.
@@ -71,6 +95,7 @@ const OPERATOR_PATTERN = /\s*(==|!=|>=|<=|>|<)\s*/;
  * @returns {Point|null}
  */
 function toPoint(ref) {
+  if (typeof ref === 'string' && ref) ref = fromUuidSync(ref) ?? ref;
   if (typeof ref?.getCenterPoint === 'function') return ref.getCenterPoint();
   if (ref?.polygonTree) return ref.polygonTree.bounds.center;
   if (ref?.object?.center) return ref.object.center;
@@ -95,36 +120,45 @@ function isVisible(ref) {
  * @returns {Point|null}
  */
 function toEdgePoint(ref, towards) {
+  if (typeof ref === 'string' && ref) ref = fromUuidSync(ref) ?? ref;
   const bounds = ref?.polygonTree?.bounds ?? ref?.object?.bounds;
   if (!bounds || !towards) return toPoint(ref);
   return { x: Math.min(Math.max(towards.x, bounds.left), bounds.right), y: Math.min(Math.max(towards.y, bounds.top), bounds.bottom) };
 }
 
 /**
- * Resolve a `variable()` target: a resolved RegionBehavior, or a raw UUID string naming one.
+ * Resolve a `variable()` target: the running trigger when unset, else whatever `ref` names.
  * @param {*} ref A resolved operand, or a bare UUID string.
- * @param {import('../run-context.mjs').RunContext} context The active run context.
+ * @param {object} context The active run context.
  * @returns {RegionBehavior|null}
  */
 function toVariableBehavior(ref, context) {
-  const behavior = ref instanceof RegionBehavior ? ref : typeof ref === 'string' && ref ? fromUuidSync(ref) : (context.info.behavior ?? null);
-  return behavior instanceof RegionBehavior ? behavior : null;
+  if (ref === null || ref === undefined || ref === '') return toTriggerBehavior(context.info.behavior);
+  return toTriggerBehavior(typeof ref === 'string' ? fromUuidSync(ref) : ref);
 }
 
 /**
- * Split a comma-separated argument list at top-level commas only, ignoring commas nested inside parentheses.
- * @param {string} raw The raw argument text.
- * @returns {string[]}
+ * Split `raw` at every occurrence of `separator` outside parentheses and quoted text.
+ * @param {string} raw The raw text.
+ * @param {string} separator The separator to split on.
+ * @returns {string[]} The split parts, untrimmed.
  */
-function splitTopLevelArgs(raw) {
+function splitTopLevel(raw, separator) {
   const parts = [];
   let depth = 0;
+  let quote = '';
   let start = 0;
   for (let i = 0; i < raw.length; i++) {
-    if (raw[i] === '(') depth++;
-    else if (raw[i] === ')') depth--;
-    else if (raw[i] === ',' && depth === 0) {
+    const char = raw[i];
+    if (quote) {
+      if (char === '\\') i++;
+      else if (char === quote) quote = '';
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === '(') depth++;
+    else if (char === ')') depth--;
+    else if (depth === 0 && raw.startsWith(separator, i)) {
       parts.push(raw.slice(start, i));
+      i += separator.length - 1;
       start = i + 1;
     }
   }
@@ -133,38 +167,143 @@ function splitTopLevelArgs(raw) {
 }
 
 /**
+ * Split a condition at its first comparison operator outside parentheses and quoted text.
+ * @param {string} raw The raw condition text.
+ * @returns {{left: string, op: string, right: string}|null} The operands and operator, or null when the condition holds no comparison.
+ */
+function splitComparison(raw) {
+  let depth = 0;
+  let quote = '';
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
+    if (quote) {
+      if (char === '\\') i++;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") quote = char;
+    else if (char === '(') depth++;
+    else if (char === ')') depth--;
+    else if (depth === 0) {
+      const op = OPERATOR_KEYS.find((key) => raw.startsWith(key, i));
+      if (op) return { left: raw.slice(0, i), op, right: raw.slice(i + op.length) };
+    }
+  }
+  return null;
+}
+
+/**
  * Evaluate `any(collection, condition)`/`all(collection, condition)`, keeping `condition` unresolved until it runs per-item.
  * @param {'any'|'all'} name Which quantifier.
  * @param {string} argsRaw The raw, unsplit argument text.
- * @param {import('../run-context.mjs').RunContext} context The active run context.
- * @returns {boolean}
+ * @param {object} context The active run context.
+ * @returns {Promise<boolean>}
  */
-function evaluateQuantifier(name, argsRaw, context) {
-  const [collectionArg = '', ...rest] = splitTopLevelArgs(argsRaw);
+async function evaluateQuantifier(name, argsRaw, context) {
+  const [collectionArg = '', ...rest] = splitTopLevel(argsRaw, ',');
   const condition = rest.join(',').trim();
-  const items = resolveCollection(resolveOperand(collectionArg, context), context);
-  if (!items.length) return name === 'all';
-  const results = items.map((item) => evaluateCondition(condition, { ...context, item }));
+  const items = resolveCollection(await resolveOperand(collectionArg, context), context);
+  if (!items.length) return false;
+  const results = await Promise.all(items.map((item) => evaluateCondition(condition, { ...context, item })));
   return name === 'any' ? results.some(Boolean) : results.every(Boolean);
 }
 
-/** @type {Record<string, (args: unknown[], context: import('../run-context.mjs').RunContext) => unknown>} Functions callable from an expression. */
+/**
+ * Convert a `*`/`?` glob pattern to a case-insensitive `RegExp` anchored to the full string.
+ * @param {string} pattern The glob pattern.
+ * @returns {RegExp} The equivalent regular expression.
+ */
+export function globToRegExp(pattern) {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`, 'i');
+}
+
+/**
+ * An actor's items whose name matches, exactly or by `*`/`?` glob.
+ * @param {Actor|null} actor The actor to search.
+ * @param {string} name An item name or glob pattern.
+ * @returns {Item[]} The matching items.
+ */
+function matchingItems(actor, name) {
+  const wanted = name.trim().toLowerCase();
+  const pattern = /[*?]/.test(wanted) ? globToRegExp(wanted) : null;
+  return [...(actor?.items ?? [])].filter((item) => {
+    const itemName = (item.name ?? '').trim().toLowerCase();
+    return pattern ? pattern.test(itemName) : itemName === wanted;
+  });
+}
+
+/**
+ * Read an attribute path off a document, falling back the way an author writes one.
+ * @param {*} ref The resolved document or placeable.
+ * @param {string} path A dotted attribute path.
+ * @returns {*} The resolved value, or undefined if no fallback found it.
+ */
+function readAttribute(ref, path) {
+  const bases = [ref, toActor(ref)].filter(Boolean);
+  const paths = path.startsWith('flags') ? [path] : [path, `system.${path}`];
+  for (const base of bases) {
+    for (const candidate of paths) {
+      if (!foundry.utils.hasProperty(base, candidate)) continue;
+      const found = foundry.utils.getProperty(base, candidate);
+      return found !== null && typeof found === 'object' && 'value' in found ? found.value : found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The direction this run travelled: a move's origin to its destination, else the Region's centre to the clicked point.
+ * @param {object} context The active run context.
+ * @param {string} [axis] "y" for up/down, "x" for left/right, omitted for the compound "up-left" form.
+ * @returns {string} The direction, or "" when the run has none.
+ */
+function directionOfRun(context, axis) {
+  const data = context.info.event?.data ?? {};
+  const from = data.movement?.origin ?? context.info.region?.object?.center;
+  const to = data.movement?.destination ?? data.point;
+  if (!from || !to) return '';
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const y = angle === 0 || Math.abs(angle) === Math.PI ? '' : angle < 0 ? 'up' : 'down';
+  const x = Math.abs(angle) === Math.PI / 2 ? '' : Math.abs(angle) < Math.PI / 2 ? 'right' : 'left';
+  if (axis === 'y') return y;
+  if (axis === 'x') return x;
+  return `${y}-${x}`;
+}
+
+/** @type {Record<string, (args: unknown[], context: object) => unknown>} Functions callable from an expression. */
 const FUNCTIONS = {
   visible: ([ref]) => isVisible(ref),
+  hasActor: ([ref]) => !!toActor(ref),
   hasCondition: ([ref, statusId]) => hasCondition(toActor(ref), statusId),
   distance: ([a, b, mode]) => (mode === 'edge' ? distanceTo(toEdgePoint(a, toPoint(b)), toEdgePoint(b, toPoint(a))) : distanceTo(toPoint(a), toPoint(b))),
   sceneDistance: ([value, unit]) => sceneDistanceFrom(Number(value), unit),
   insideRegion: ([ref, region]) => pointInsideRegion(toPoint(ref), region),
+  movementEnded: (_args, context) => movementEndedInside(context),
+  elevationChanged: (_args, context) => movementChangedElevation(context),
   canSee: ([a, b]) => canSee(toPoint(a), toPoint(b)),
-  attribute: ([ref, path]) => foundry.utils.getProperty(ref ?? {}, path),
+  attribute: ([ref, path]) => readAttribute(ref, String(path)),
   hasItem: ([ref, name]) => !!toActor(ref)?.items.find((i) => i.name?.toLowerCase() === String(name).toLowerCase()),
+  itemCount: ([ref, name]) => matchingItems(toActor(ref), String(name)).length,
+  itemQuantity: ([ref, name]) => matchingItems(toActor(ref), String(name)).reduce((total, item) => total + Number(item.system?.quantity ?? 1), 0),
   chance: ([percent]) => Math.random() * 100 < Number(percent),
+  roll: async ([formula]) => (await new Roll(String(formula)).evaluate({ allowInteractive: false })).total,
   count: ([id], context) => resolveCollection(id, context).length,
   tileData: ([path], context) => {
     const tile = resolveReference(context.info.behavior?.system?.linkedTile, context);
-    return tile ? foundry.utils.getProperty(tile, path) : undefined;
+    if (!tile) return undefined;
+    const found = foundry.utils.getProperty(tile, path);
+    return found !== null && typeof found === 'object' && 'value' in found ? found.value : found;
   },
   triggerCount: (_args, context) => context.info.triggerCount,
+  uniqueTriggerCount: (_args, context) => new Set((context.info.behavior?.getFlag(MODULE.ID, 'history') ?? []).map((entry) => entry.tokenId)).size,
+  moveDirection: ([axis], context) => directionOfRun(context, axis === undefined ? undefined : String(axis)),
+  darkness: (_args, context) => context.info.scene?.environment.darknessLevel,
+  timeOfDay: () => game.time.components.hour * 60 + game.time.components.minute,
+  eventIs: (names, context) => names.includes(context.info.event.name),
   tokenCount: ([ref], context) => {
     const tokenId = ref?.id ?? ref?.object?.id;
     const history = context.info.behavior?.getFlag(MODULE.ID, 'history') ?? [];
@@ -197,10 +336,10 @@ const FUNCTIONS = {
 /**
  * Resolve one operand: a function call, a `{{path}}` run-context lookup, or a boolean/number/string literal.
  * @param {string} raw The raw operand text.
- * @param {import('../run-context.mjs').RunContext} context The active run context.
- * @returns {*} The resolved value.
+ * @param {object} context The active run context.
+ * @returns {Promise<*>} The resolved value.
  */
-function resolveOperand(raw, context) {
+async function resolveOperand(raw, context) {
   const trimmed = raw.trim();
   const call = trimmed.match(/^(\w+)\((.*)\)$/);
   if (call) {
@@ -208,7 +347,7 @@ function resolveOperand(raw, context) {
     if (name === 'any' || name === 'all') return evaluateQuantifier(name, argsRaw, context);
     const fn = FUNCTIONS[name];
     if (!fn) return undefined;
-    const args = argsRaw.trim() === '' ? [] : argsRaw.split(',').map((arg) => resolveOperand(arg, context));
+    const args = argsRaw.trim() === '' ? [] : await Promise.all(splitTopLevel(argsRaw, ',').map((arg) => resolveOperand(arg, context)));
     return fn(args, context);
   }
   const path = trimmed.match(/^\{\{(.+)\}\}$/);
@@ -220,16 +359,20 @@ function resolveOperand(raw, context) {
 }
 
 /**
- * Evaluate a condition against a run context.
+ * Evaluate a condition against a run context. Clauses may be joined with `&&`.
  * @param {string|boolean} condition A boolean, a `"<left> <op> <right>"` expression, or a function call.
- * @param {import('../run-context.mjs').RunContext} context The active run context.
- * @returns {boolean} The evaluated result.
+ * @param {object} context The active run context.
+ * @returns {Promise<boolean>} The evaluated result.
  */
-export function evaluateCondition(condition, context) {
+export async function evaluateCondition(condition, context) {
   if (typeof condition === 'boolean') return condition;
   if (typeof condition !== 'string' || !condition.trim()) return false;
-  const parts = condition.split(OPERATOR_PATTERN);
-  if (parts.length === 1) return !!resolveOperand(parts[0], context);
-  const [left, op, right] = parts;
-  return OPERATORS[op](resolveOperand(left, context), resolveOperand(right, context));
+  const clauses = splitTopLevel(condition, '&&');
+  if (clauses.length > 1) {
+    for (const clause of clauses) if (!(await evaluateCondition(clause, context))) return false;
+    return true;
+  }
+  const comparison = splitComparison(condition);
+  if (!comparison) return !!(await resolveOperand(condition, context));
+  return OPERATORS[comparison.op](await resolveOperand(comparison.left, context), await resolveOperand(comparison.right, context));
 }

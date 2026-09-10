@@ -30,7 +30,7 @@ async function dropItem(data) {
     pertoken: true,
     handlers: {
       click: seq(
-        { type: 'toggleTileVisibility', tile: { kind: 'uuid', value: tile.uuid }, hidden: true },
+        { type: 'toggleTileVisibility', tile: { kind: 'uuid', value: tile.uuid }, mode: 'hide' },
         { type: 'addItem', actor: ACTOR, itemUuid: item.uuid },
         { type: 'notification', text: `${item.name} added to inventory.`, level: 'info', audience: 'triggeringUser' }
       )

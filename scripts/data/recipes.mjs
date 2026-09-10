@@ -46,8 +46,8 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter', 'tokenExit'],
           handlers: {
-            tokenEnter: { type: 'toggleTileVisibility', tile: TILE_REF, hidden: false },
-            tokenExit: { type: 'toggleTileVisibility', tile: TILE_REF, hidden: true }
+            tokenEnter: { type: 'toggleTileVisibility', tile: TILE_REF, mode: 'show' },
+            tokenExit: { type: 'toggleTileVisibility', tile: TILE_REF, mode: 'hide' }
           }
         })
       }
@@ -272,7 +272,7 @@ export const RECIPES = [
         type: MODULE.BEHAVIOR_TYPE,
         system: buildTriggerSystem({
           events: ['tokenEnter'],
-          handlers: { tokenEnter: seq({ type: 'toggleTileVisibility', tile: TILE_REF, hidden: false }, { type: 'resetFog' }, { type: 'pingLocation', location: { x: 0, y: 0 }, style: 'alert' }) }
+          handlers: { tokenEnter: seq({ type: 'toggleTileVisibility', tile: TILE_REF, mode: 'show' }, { type: 'resetFog' }, { type: 'pingLocation', location: { x: 0, y: 0 }, style: 'alert' }) }
         })
       }
     ]
@@ -403,12 +403,12 @@ export const RECIPES = [
               condition: '{{variables.state}} == true',
               then: [
                 { type: 'setVariable', name: 'state', value: false },
-                { type: 'toggleTileVisibility', tile: TILE_REF, hidden: true },
+                { type: 'toggleTileVisibility', tile: TILE_REF, mode: 'hide' },
                 { type: 'chatMessage', text: 'The switch clicks off.' }
               ],
               else: [
                 { type: 'setVariable', name: 'state', value: true },
-                { type: 'toggleTileVisibility', tile: TILE_REF, hidden: false },
+                { type: 'toggleTileVisibility', tile: TILE_REF, mode: 'show' },
                 { type: 'chatMessage', text: 'The switch clicks on.' }
               ]
             }

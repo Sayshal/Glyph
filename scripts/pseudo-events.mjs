@@ -19,23 +19,24 @@ export function dispatchPseudoEvent(regions, name, data = {}, user = game.user) 
   }
 }
 
-registerQuery('runPseudoEvent', ({ regionUuids, name, tokenUuid }, { user }) => {
+registerQuery('runPseudoEvent', ({ regionUuids, name, tokenUuid, data }, { user }) => {
   const regions = regionUuids.map((uuid) => fromUuidSync(uuid)).filter(Boolean);
-  dispatchPseudoEvent(regions, name, { token: tokenUuid ? fromUuidSync(tokenUuid) : null }, user);
+  dispatchPseudoEvent(regions, name, { ...data, token: tokenUuid ? fromUuidSync(tokenUuid) : null }, user);
 });
 
 /**
  * Dispatch a single-client interaction pseudo-event (click family, hover), relaying to the primary GM when non-primary.
  * @param {RegionDocument[]} regions Candidate regions to check.
  * @param {string} name The pseudo-event name.
- * @param {object} [data] Event-specific payload; `data.token`, if present, must be a TokenDocument.
+ * @param {object} [data] Event-specific payload; `data.token`, if present, must be a TokenDocument, and every other field must be JSON-safe.
  */
 function dispatchInteractivePseudoEvent(regions, name, data = {}) {
   if (!regions.length) return;
   if (ATLAS.isPrimaryGM) return dispatchPseudoEvent(regions, name, data);
   const gm = ATLAS.primaryGM;
   if (!gm) return;
-  query(gm, 'runPseudoEvent', { regionUuids: regions.map((r) => r.uuid), name, tokenUuid: data.token?.uuid ?? null });
+  const { token, ...rest } = data;
+  query(gm, 'runPseudoEvent', { regionUuids: regions.map((r) => r.uuid), name, tokenUuid: token?.uuid ?? null, data: rest });
 }
 
 const hoveredRegions = new Set();
@@ -44,7 +45,7 @@ const hoveredRegions = new Set();
 let cursorApplied = false;
 
 /** @type {string[]} Pseudo-events worth showing a pointer cursor for - hover and every click variant. */
-const CURSOR_PSEUDO_EVENTS = ['hoverIn', 'hoverOut', 'click', 'rightclick', 'dblclick'];
+export const CURSOR_PSEUDO_EVENTS = ['hoverIn', 'hoverOut', 'click', 'rightclick', 'dblclick', 'dblrightclick'];
 
 /**
  * Whether `region` has an enabled trigger listening for hover or a click variant.
@@ -67,11 +68,13 @@ function regionsAtPoint(pos) {
 
 /**
  * Dispatch a click-family pseudo-event to every Region under the pointer.
- * @param {string} name The pseudo-event name: "click", "rightclick", or "dblclick".
+ * @param {string} name The pseudo-event name: "click", "rightclick", "dblclick", or "dblrightclick".
+ * @param {MouseEvent} event The originating DOM event.
  */
-function checkRegionClick(name) {
-  const regions = regionsAtPoint(canvas.mousePosition);
-  dispatchInteractivePseudoEvent(regions, name, { token: canvas.tokens.controlled[0]?.document ?? null });
+function checkRegionClick(name, { shiftKey, altKey, ctrlKey, metaKey }) {
+  const { x, y } = canvas.mousePosition;
+  const regions = regionsAtPoint({ x, y });
+  dispatchInteractivePseudoEvent(regions, name, { token: canvas.tokens.controlled[0]?.document ?? null, point: { x, y }, shiftKey, altKey, ctrlKey, metaKey });
 }
 
 /**
@@ -82,7 +85,7 @@ function checkRegionHover(pos) {
   if (!canvas.ready || !canvas.scene) return;
   let anyInteractive = false;
   for (const region of canvas.scene.regions) {
-    const isHovered = region.polygonTree.testPoint(pos);
+    const isHovered = !region.hidden && region.polygonTree.testPoint(pos);
     const wasHovered = hoveredRegions.has(region.id);
     if (isHovered !== wasHovered) {
       if (isHovered) hoveredRegions.add(region.id);
@@ -103,23 +106,64 @@ function checkRegionHover(pos) {
 /** @type {number|null} Pending single-click dispatch timer, cancelled by a following dblclick. */
 let clickTimer = null;
 
-/** Register hover, click, world-time, and darkness pseudo-event dispatch. */
+/** @type {number|null} Pending single-right-click dispatch timer, cancelled by a following right-click. */
+let rightClickTimer = null;
+
+/** Register hover, click, rotation, token-creation, combat, scene-load, world-time, darkness, and door pseudo-event dispatch. */
 export function registerPseudoEvents() {
   Hooks.once('canvasReady', () => {
     canvas.registerMouseMoveHandler(checkRegionHover);
-    canvas.app.view.addEventListener('click', () => {
-      clearTimeout(clickTimer);
-      clickTimer = setTimeout(() => checkRegionClick('click'), 300);
+    canvas.environment.addEventListener('darknessChange', (event) => {
+      if (!ATLAS.isPrimaryGM) return;
+      dispatchPseudoEvent(canvas.scene?.regions ?? [], 'canvasDarknessChanged', event.environmentData);
     });
-    canvas.app.view.addEventListener('contextmenu', () => checkRegionClick('rightclick'));
-    canvas.app.view.addEventListener('dblclick', () => {
+    canvas.app.view.addEventListener('click', (event) => {
       clearTimeout(clickTimer);
-      checkRegionClick('dblclick');
+      clickTimer = setTimeout(() => checkRegionClick('click', event), 300);
+    });
+    canvas.app.view.addEventListener('contextmenu', (event) => {
+      if (rightClickTimer) {
+        clearTimeout(rightClickTimer);
+        rightClickTimer = null;
+        return checkRegionClick('dblrightclick', event);
+      }
+      rightClickTimer = setTimeout(() => {
+        rightClickTimer = null;
+        checkRegionClick('rightclick', event);
+      }, 300);
+    });
+    canvas.app.view.addEventListener('dblclick', (event) => {
+      clearTimeout(clickTimer);
+      checkRegionClick('dblclick', event);
     });
   });
   Hooks.on('canvasReady', () => {
     hoveredRegions.clear();
     cursorApplied = false;
+    if (ATLAS.isPrimaryGM) dispatchPseudoEvent(canvas.scene?.regions ?? [], 'canvasReady');
+  });
+  Hooks.on('updateToken', (token, changed) => {
+    if (changed.rotation === undefined || !ATLAS.isPrimaryGM) return;
+    dispatchPseudoEvent(token.regions, 'tokenRotated', { token, rotation: token.rotation });
+  });
+  Hooks.on('createToken', (token) => {
+    if (!ATLAS.isPrimaryGM) return;
+    dispatchPseudoEvent(token.regions, 'tokenCreated', { token });
+  });
+  Hooks.on('preUpdateCombat', (combat, changed) => {
+    if (!combat.started || !ATLAS.isPrimaryGM) return;
+    if (changed.turn === undefined && changed.round === undefined) return;
+    dispatchPseudoEvent(combat.scene?.regions ?? [], 'combatTurnEnd', { combat, token: combat.combatant?.token ?? null });
+  });
+  Hooks.on('updateCombat', (combat, changed) => {
+    if (!combat.started || !ATLAS.isPrimaryGM) return;
+    if (changed.round === 1 && combat.turn === 0) dispatchPseudoEvent(combat.scene?.regions ?? [], 'combatStart', { combat });
+    if (changed.round !== undefined) dispatchPseudoEvent(combat.scene?.regions ?? [], 'combatRound', { combat, round: combat.round });
+    if (changed.turn !== undefined || changed.round !== undefined) dispatchPseudoEvent(combat.scene?.regions ?? [], 'combatTurnStart', { combat, token: combat.combatant?.token ?? null });
+  });
+  Hooks.on('deleteCombat', (combat) => {
+    if (!combat.started || !ATLAS.isPrimaryGM) return;
+    dispatchPseudoEvent(combat.scene?.regions ?? [], 'combatEnd', { combat });
   });
   Hooks.on('updateWorldTime', () => {
     if (!ATLAS.isPrimaryGM) return;

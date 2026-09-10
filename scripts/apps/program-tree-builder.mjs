@@ -29,6 +29,35 @@ function normalizeChoices(choices) {
   return Object.entries(choices).map(([value, label]) => ({ value, label: _loc(label) }));
 }
 
+/** The active system's language keys, flattened out of its nested CONFIG groups. */
+function languageChoices() {
+  const choices = [];
+  const walk = (group, groupLabel) => {
+    for (const [key, entry] of Object.entries(group)) {
+      if (typeof entry === 'string') choices.push({ value: key, label: _loc(entry), group: groupLabel });
+      else if (entry?.children) walk(entry.children, groupLabel ?? _loc(entry.label));
+    }
+  };
+  const languages = CONFIG[game.system.id.toUpperCase()]?.languages;
+  if (languages && !Array.isArray(languages) && typeof languages === 'object') walk(languages);
+  return choices;
+}
+
+/**
+ * The template parts a reference (or a reference-valued point) renders from.
+ * @param {{kind: string, value: string}} ref The stored reference.
+ * @param {string} path The reference's path in the tree.
+ * @returns {object} The `refKind`/`refValuePath`/`refValue`/`refResolvers` parts.
+ */
+function referenceParts(ref, path) {
+  return {
+    refKind: ref.kind,
+    refValuePath: `${path}.value`,
+    refValue: ref.value ?? '',
+    refResolvers: ref.kind === 'collection' ? listResolvers().map((r) => ({ ...r, selected: r.id === ref.value })) : []
+  };
+}
+
 /**
  * Build the plain-data view model for one field's widget.
  * @param {object} field A field descriptor from a node type's `fields` metadata.
@@ -102,6 +131,11 @@ function buildWidget(field, value, path, ui, node) {
       }));
       return { ...base, kind: 'select', choices, selected: [value] };
     }
+    case 'language': {
+      const choices = languageChoices();
+      if (!choices.length) return { ...base, kind: 'text', value: value ?? '' };
+      return { ...base, kind: 'select', choices: [{ value: '', label: _loc('GLYPH.ACTIONS.chatMessage.FIELDS.language.none') }, ...choices], selected: [value || ''] };
+    }
     case 'rollMode':
       return { ...base, kind: 'select', choices: Object.entries(CONFIG.ChatMessage.modes).map(([k, m]) => ({ value: k, label: _loc(m.label) })), selected: [value] };
     case 'resolverSelect':
@@ -112,11 +146,12 @@ function buildWidget(field, value, path, ui, node) {
       return { ...base, kind: 'select', choices: ui.handlerNames.map((n) => ({ value: n, label: n })), selected: [value] };
     case 'point': {
       const p = value && typeof value === 'object' ? value : {};
+      if (p.kind) return { ...base, kind: 'point', documentType: field.documentType ?? '', ...referenceParts(p, path) };
       return { ...base, kind: 'point', x: p.x ?? 0, y: p.y ?? 0, elevation: p.elevation ?? 0 };
     }
     case 'reference': {
       const ref = value && typeof value === 'object' ? value : { kind: 'uuid', value: '' };
-      return { ...base, kind: 'reference', documentType: field.documentType ?? '', refKind: ref.kind, refValuePath: `${path}.value`, refValue: ref.value ?? '' };
+      return { ...base, kind: 'reference', documentType: field.documentType ?? '', ...referenceParts(ref, path) };
     }
     case 'expression':
       return { ...base, kind: 'expression', value: value ?? '' };
