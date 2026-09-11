@@ -23,6 +23,18 @@ export function getHurtHealAdapter() {
   return ADAPTERS.get(game.system.id);
 }
 
+/** @type {Record<string, string>} Glyph's stored roll-mode keys mapped to the message modes `Roll#toMessage` takes. */
+const MESSAGE_MODES = { publicroll: 'public', gmroll: 'gm', blindroll: 'blind', selfroll: 'self' };
+
+/**
+ * A stored roll-mode key as a `Roll#toMessage` message mode.
+ * @param {string|null} rollMode The stored roll-mode key.
+ * @returns {string|undefined} The message mode, or undefined to leave the default.
+ */
+export function toMessageMode(rollMode) {
+  return MESSAGE_MODES[rollMode] ?? undefined;
+}
+
 /**
  * The active game system's damage type key -> localized label choices, if registered.
  * @returns {Record<string, string>|null}

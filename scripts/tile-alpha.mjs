@@ -1,4 +1,4 @@
-/** Trace a Tile's image into Region polygon shapes, off core's cached texture alpha map (loader.mjs:105). */
+/** Trace a Tile's image into Region polygon shapes, off core's cached texture alpha map. */
 
 /** @type {number} Contour samples below this length are dropped as noise. */
 const MIN_CONTOUR_POINTS = 8;

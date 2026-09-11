@@ -36,7 +36,7 @@ const runQueues = new Map();
 
 /** The RegionBehaviorType glyph registers as `glyph.trigger`. */
 export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.RegionBehaviorType {
-  /** @type {string[]} Event names outside `CONST.REGION_EVENTS`, dispatched by scripts/pseudo-events.mjs. */
+  /** @type {string[]} Event names outside `CONST.REGION_EVENTS`, dispatched as pseudo-events. */
   static PSEUDO_EVENTS = [
     'hoverIn',
     'hoverOut',

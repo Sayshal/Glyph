@@ -9,7 +9,7 @@ import { CURSOR_PSEUDO_EVENTS } from '../pseudo-events.mjs';
 import { idOf } from './matt-sentinels.mjs';
 import { hasUnresolvedTemplate, translateMattTemplate } from './matt-template.mjs';
 
-/** @type {Record<string, string>} MATT per-tile flags with a same-shape glyph field. MATT's `restriction` filters by token ownership, `controlled` by triggering user (monks-active-tiles.js:4805-4810). */
+/** @type {Record<string, string>} MATT per-tile flags with a same-shape glyph field. MATT's `restriction` filters by token ownership, `controlled` by triggering user. */
 const FIELD_MAP = {
   restriction: 'tokenRestriction',
   controlled: 'userRestriction',
@@ -22,7 +22,7 @@ const FIELD_MAP = {
   usealpha: 'traceAlpha'
 };
 
-/** @type {Record<string, string>} MATT per-tile flags with no glyph equivalent. `snap` is per-action in MATT too (actions.js:755) and `record` gates a history glyph always keeps, so neither is listed. */
+/** @type {Record<string, string>} MATT per-tile flags with no glyph equivalent. `snap` is per-action in MATT too and `record` gates a history glyph always keeps, so neither is listed. */
 const DROPPED_FIELDS = {
   pointer: 'Cosmetic hover cursor; glyph shows one automatically over a Region whose trigger listens for a click or hover, so this only matters on a tile that listens for neither.'
 };
@@ -370,7 +370,7 @@ function loopCollectionFromEntity(entity) {
 }
 
 /**
- * Convert a skipped span from its first Landing on, which MATT can still jump to (monks-active-tiles.js:5138).
+ * Convert a skipped span from its first Landing on, which MATT can still jump to.
  * @param {{action: string, data: object}[]} skipped Actions the loop analysis did not absorb.
  * @param {{report: object[], stubs: object[], destinations: object[]}} out Accumulators this call appends to.
  * @param {object} matt The tile's whole `flags.monks-active-tiles` object.
@@ -837,7 +837,7 @@ function isAutoAnchor(entry) {
 }
 
 /**
- * The condition one auto-anchor tests, for one handler (monks-active-tiles.js:4999-5026).
+ * The condition one auto-anchor tests, for one handler.
  * @param {string} tag The anchor's tag, `_` prefix included.
  * @param {string} event The handler key being built.
  * @param {Set<string>} modes The MATT trigger modes this handler stands for.
@@ -862,7 +862,7 @@ function autoAnchorCondition(tag, event, modes) {
 }
 
 /**
- * The jump a handler opens with, reproducing MATT's auto-anchor dispatch (monks-active-tiles.js:4991-5030).
+ * The jump a handler opens with, reproducing MATT's auto-anchor dispatch.
  * @param {{action: string, data: object}[]} actions The tile's whole flat MATT action list.
  * @param {string} event The handler key being built.
  * @param {Set<string>} modes The MATT trigger modes this handler stands for.

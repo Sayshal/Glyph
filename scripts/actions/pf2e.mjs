@@ -1,5 +1,5 @@
 import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
-import { registerHurtHealAdapter } from '../hurt-heal-adapters.mjs';
+import { registerHurtHealAdapter, toMessageMode } from '../hurt-heal-adapters.mjs';
 import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
 
 /** pf2e-only */
@@ -34,7 +34,7 @@ export function registerPf2eActions() {
       const token = actor.getActiveTokens()[0]?.document ?? null;
       const DamageRoll = CONFIG.Dice.rolls.find((cls) => cls.name === 'DamageRoll');
       const roll = damageType ? await new DamageRoll(`${formula}[${damageType}]`).evaluate() : await new Roll(formula, actor.getRollData()).evaluate();
-      if (postCard) await roll.toMessage({ speaker: ChatMessage.getSpeaker({ token }) }, { rollMode: rollMode || undefined });
+      if (postCard) await roll.toMessage({ speaker: ChatMessage.getSpeaker({ token }) }, { messageMode: toMessageMode(rollMode) });
       if (!damageType) return actor.applyDamage({ damage: roll.total, token, skipIWR: true });
       await actor.applyDamage({ damage: roll, token, skipIWR: false });
     },

@@ -730,7 +730,7 @@ export const ACTION_MAP = {
 const ROLL_MODE_MAP = { roll: 'publicroll', gmroll: 'gmroll', blindroll: 'blindroll', selfroll: 'selfroll' };
 
 /**
- * Convert a MATT `hurtheal` value into a glyph formula, inverting MATT's sign (`actions.js:2167`).
+ * Convert a MATT `hurtheal` value into a glyph formula, inverting MATT's sign.
  * @param {*} raw The raw MATT `value`.
  * @returns {string} A glyph formula, or an empty string when there is nothing to roll.
  */
@@ -785,7 +785,7 @@ const NUMERIC_FIELD = /^=?\s*(-?(?:\d+\.?\d*|\.\d+))\s*%?$/;
 /** @type {RegExp} A MATT inline roll, `[[1d100]]` or `[[/publicroll 1d100]]`, optionally with a `{flavor}` suffix. */
 const INLINE_ROLL = /^\[\[\s*(?:\/[a-z]+\s+)?(.+?)\s*\]{2,3}(?:\{[^}]*\})?$/i;
 
-/** @type {RegExp} Arithmetic over numbers alone, which MATT evals (monks-active-tiles.js:400-403). */
+/** @type {RegExp} Arithmetic over numbers alone, which MATT evals. */
 const ARITHMETIC_FIELD = /^[\d\s+\-*/().]*[+\-*/][\d\s+\-*/().]*$/;
 
 /**
@@ -1135,7 +1135,7 @@ function multiCollection(entity) {
 /** @type {Record<string, string>} MATT door-state values (legacy lowercase, current CONST keys, legacy numbers) -> a `changeWallDoor.state` choice. */
 const DOOR_STATE_MAP = { open: 'open', closed: 'closed', lock: 'locked', locked: 'locked', toggle: 'toggle', 0: 'closed', 1: 'open', 2: 'locked' };
 
-/** @type {Record<string, string>} MATT door-type values -> a `changeWallDoor.doorType` choice. Lowercase "none" is MATT's no-change sentinel (`actions.js:2820`), where the CONST key "NONE" means not-a-door. */
+/** @type {Record<string, string>} MATT door-type values -> a `changeWallDoor.doorType` choice. Lowercase "none" is MATT's no-change sentinel, where the CONST key "NONE" means not-a-door. */
 const DOOR_TYPE_MAP = { NONE: 'none', door: 'door', secret: 'secret', toggle: 'toggle', 0: 'none', 1: 'door', 2: 'secret' };
 
 /** @type {Record<string, string>} MATT movement-restriction values -> a `changeWallDoor.move` choice. */
