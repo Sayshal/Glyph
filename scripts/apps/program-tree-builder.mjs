@@ -4,7 +4,7 @@ import { getNodeType, listNodeTypes } from '../nodes/registry.mjs';
 import { getSkillChoices } from '../skill-test-adapters.mjs';
 import { listResolvers } from '../targeting.mjs';
 import { renderCombobox } from './combobox.mjs';
-import { collectLandingTags } from './program-tree-ops.mjs';
+import { collectCurrentNames, collectLandingTags } from './program-tree-ops.mjs';
 
 /**
  * Build the grouped node-type option list shared by every "add node" combobox.
@@ -63,7 +63,7 @@ function referenceParts(ref, path) {
  * @param {object} field A field descriptor from a node type's `fields` metadata.
  * @param {*} value The field's current value.
  * @param {string} path The dotted path to this field's owning node.
- * @param {{handlerNames: string[], landingTags: Set<string>}} ui Shared build-time context.
+ * @param {{handlerNames: string[], landingTags: Set<string>, currentNames: Set<string>}} ui Shared build-time context.
  * @param {object} node The owning node instance, for widgets that read a sibling field.
  * @returns {object} The widget view model.
  */
@@ -138,8 +138,13 @@ function buildWidget(field, value, path, ui, node) {
     }
     case 'rollMode':
       return { ...base, kind: 'select', choices: Object.entries(CONFIG.ChatMessage.modes).map(([k, m]) => ({ value: k, label: _loc(m.label) })), selected: [value] };
-    case 'resolverSelect':
-      return { ...base, kind: 'select', choices: listResolvers().map((r) => ({ value: r.id, label: r.label })), selected: [value] };
+    case 'resolverSelect': {
+      const names = new Set(ui.currentNames);
+      if (typeof value === 'string' && value.startsWith('var:')) names.add(value.slice(4));
+      const group = _loc('GLYPH.TREE.currentCollections');
+      const variables = [...names].map((name) => ({ value: `var:${name}`, label: name, group }));
+      return { ...base, kind: 'select', choices: [...listResolvers().map((r) => ({ value: r.id, label: r.label })), ...variables], selected: [value] };
+    }
     case 'tagRef':
       return { ...base, kind: 'tagRef', value: value ?? '', listId: `glyph-landings-${path.replace(/\./g, '-')}`, tags: [...ui.landingTags] };
     case 'handlerRef':
@@ -259,6 +264,8 @@ export function buildNode(node, path, ui, expanded) {
  * @returns {object} The tree's view model.
  */
 export function buildTree(root, behavior, expanded) {
-  const ui = { handlerNames: Object.keys(behavior.system.handlers ?? {}), landingTags: collectLandingTags(root) };
+  const currentNames = collectCurrentNames(root);
+  for (const handler of Object.values(behavior.system.handlers ?? {})) collectCurrentNames(handler, currentNames);
+  const ui = { handlerNames: Object.keys(behavior.system.handlers ?? {}), landingTags: collectLandingTags(root), currentNames };
   return buildNode(root, '', ui, expanded);
 }

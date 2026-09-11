@@ -1,6 +1,8 @@
 # Glyph: Active Region Triggers
 
-_The map does the work._
+The map does the work.
+
+![Glyph Banner](https://raw.githubusercontent.com/Sayshal/glyph/main/banner.png)
 
 ![GitHub release](https://img.shields.io/github/v/release/Sayshal/glyph?style=for-the-badge)
 ![GitHub Downloads (specific asset, all releases)](<https://img.shields.io/github/downloads/Sayshal/glyph/module.zip?style=for-the-badge&logo=foundryvirtualtabletop&logoColor=white&logoSize=auto&label=Downloads%20(Total)&color=ff144f>)
@@ -14,29 +16,29 @@ _The map does the work._
 
 ## Triggers Without Macros
 
-Attach a program to a Region and let the scene run it: a token steps through a doorway, a player clicks a lever, a trap arms itself. Glyph replaces Active Tile Triggers with something built for Foundry's own Region system - no `eval()`, no jQuery, no tile geometry to fight.
+Attach a program to a Region and the scene runs it when a token steps through a doorway or a player clicks a lever.
 
 ---
 
 ## What You Get
 
-**Visual Program Editor:** Build trigger logic as a node tree instead of a script: sequences, if/else branches, loops over tokens in the Region, sub-program calls, and delays. Every field accepts `{{path}}` interpolation against the triggering event, so a chat message can reference `{{token.name}}` and a formula can reference `{{token.actor}}` directly.
+**Visual Program Editor:** Trigger logic is a node tree: sequences, if/else branches, loops over tokens in the Region, calls to other triggers, and delays. Any field can read from the triggering event with `{{path}}`, like `{{token.name}}` in a chat message.
 
 <img src="https://wiki.3deathsaves.com/glyph/program-editor.png" alt="Visual Program Editor" width="750">
 
-**Events Core Doesn't Fire:** Beyond core Region events (enter, exit, move, turn start/end), Glyph adds hover, click, right-click, double-click, door opened/closed/locked/unlocked/revealed, world time changes, and darkness level changes. Interaction events relay correctly in multiplayer, so a player's click on a Region resolves through the primary GM's client.
+**Events Core Doesn't Fire:** Core Regions fire on enter, exit, move, and turn start/end. Glyph adds hover, clicks, door state changes, world time changes, and darkness changes.
 
 <img src="https://wiki.3deathsaves.com/glyph/event-picker.png" alt="Event Picker" width="750">
 
-**Actions Across Tokens, Tiles, Scenes, Audio, and Messaging:** Move, rotate, or create tokens, toggle conditions, teleport, change tile images or occlusion, play or stop sounds through a tracked playlist, post chat cards, show dialogs with custom buttons, open journals or actor sheets. Persistent per-behavior variables let a Region remember state between triggers: the Toggle Switch recipe uses one to track whether a tile is currently visible.
+**Actions for Tokens, Tiles, Audio, and Chat:** Move, rotate, create, or teleport tokens and toggle their conditions. Swap tile images, play or stop sounds, post chat cards, and open dialogs, journals, or actor sheets. Per-behavior variables persist between runs; the Toggle Switch recipe uses one to remember whether its tile is visible.
 
 <img src="https://wiki.3deathsaves.com/glyph/action-picker.png" alt="Action Picker" width="750">
 
-**System-Aware Actions:** Hurt/Heal accepts a dice formula (not just a flat number), an optional damage type pulled straight from the active system's own list, and can post the roll to chat as a damage card. Ability Test and Skill Test run a real check through the system's own roll pipeline. Currently wired for D&D 5e and Pathfinder 2e, using the same adapter pattern for whatever system comes next.
+**System-Aware Actions:** Hurt/Heal takes a dice formula and an optional damage type from the active system's list, and can post the roll as a damage card. Ability Test and Skill Test roll through the system's own pipeline. Enhanced support for D&D5e and PF2e.
 
 <img src="https://wiki.3deathsaves.com/glyph/hurt-heal.png" alt="Hurt/Heal Action" width="750">
 
-**Import From Monk's Active Tile Triggers:** Right-click a scene with MATT tiles and Glyph converts their actions into equivalent program trees automatically, flagging anything it can't translate for manual review instead of silently dropping it.
+**Import From Monk's Active Tile Triggers:** Right-click a scene with Monk's Active Tile Triggers tiles and Glyph converts their actions into program trees. Anything it can't translate gets flagged for manual review.
 
 <img src="https://wiki.3deathsaves.com/glyph/matt-import.png" alt="MATT Import" width="750">
 
@@ -44,10 +46,15 @@ Attach a program to a Region and let the scene run it: a token steps through a d
 
 ## Also Included
 
-- **Recipe Library:** 20+ ready-to-use recipes across movement, lighting, hazards, mechanisms, and social encounters - teleporters, stairways, light switches, traps, ambushes, merchant stalls. Applying one creates every Region behavior it needs in a single click.
-- **Sequence, Branch & Loop Nodes:** `if`/`else`, `forEach` over tokens in the Region, `goto`/`landing` for jumping within a program, `call` for invoking another trigger's handler, and `wait` for timed delays.
-- **Optional Module Integrations:** Actions for Calendaria (advance time, create calendar notes), Bondsmith (reputation, faction membership), Peddler, Minstrel, Hero Mancer, Spell Book, Mindful Encounters, Tenacity, Don't Forget, Token Light Condition, FXMaster, and Tagger appear once each module is active.
-- **A Public API:** `GLYPH.registerAction()` lets any module register its own node type, namespaced under its own module id, so third-party actions show up in the same picker as Glyph's built-ins.
+- `if`/`else`, `forEach`, `goto`/`landing`, `call`, and `wait` nodes for flow control.
+- Actions for Calendaria, Bondsmith, Peddler, Minstrel, Hero Mancer, Spell Book, Mindful Encounters, Tenacity, Don't Forget, Token Light Condition, FXMaster, and Tagger. Each set shows up once its module is active.
+- `GLYPH.registerAction()` lets other modules add their own nodes to the action picker.
+
+---
+
+## 20+ Ready-to-Use Recipes
+
+Teleporters, stairways, light switches, traps, ambushes, merchant stalls. Applying a recipe creates every Region behavior it needs in one click.
 
 <img src="https://wiki.3deathsaves.com/glyph/recipe-picker.png" alt="Recipe Picker" width="750">
 
@@ -55,14 +62,13 @@ Attach a program to a Region and let the scene run it: a token steps through a d
 
 ## For the Tinkerers
 
-Full API at `GLYPH` for macros and module integration.
+The `GLYPH` global exposes the API for macros and other modules. `GLYPH.registerAction()` adds custom actions, and `GLYPH.runTrigger()` runs a trigger from a macro.
 
 ```javascript
 GLYPH.registerAction('my-module', 'sayHello', {
   execute: async (node, context) => ChatMessage.create({ content: `Hello, ${node.name}!` })
 });
 
-const isAtlasActive = GLYPH.isModuleActive('3ds-atlas');
 await GLYPH.runTrigger(behaviorUuid, 'manual');
 ```
 
@@ -70,7 +76,7 @@ await GLYPH.runTrigger(behaviorUuid, 'manual');
 
 ## Requirements
 
-Requires **[3DS:ATLAS](https://github.com/Sayshal/3ds-atlas)**, the shared settings, theming, and troubleshooting layer for 3 Death Saves modules. Glyph's UI follows whatever theme you've set there.
+Glyph requires **[3DS:ATLAS](https://github.com/Sayshal/3ds-atlas)**, the shared settings and theming layer for 3 Death Saves modules. Glyph's UI uses the theme set there.
 
 ---
 
@@ -82,10 +88,4 @@ Find **Glyph** in Foundry's Module Browser, or paste this manifest URL:
 https://github.com/Sayshal/glyph/releases/latest/download/module.json
 ```
 
-Questions? Ideas? Join us on [Discord](https://discord.gg/PzzUwU9gdz) or check the [Wiki](https://wiki.3deathsaves.com/glyph/).
-
----
-
-## License
-
-MIT - see [LICENSE](LICENSE).
+Questions and ideas go to [Discord](https://discord.gg/PzzUwU9gdz). Guides are on the [Wiki](https://wiki.3deathsaves.com/glyph/).

@@ -1,7 +1,13 @@
+This module is pending Foundry approval. You can download it from [here](https://github.com/Sayshal/glyph/releases/latest/download/module.json).
+
 ## New Features
 
-- A visual, node-based trigger editor built into the Region's own behavior config: if/else branches, forEach loops, goto jumps and waits composed from nodes, no macro code required.
-- Over 60 actions across tokens, tiles, scenes, audio and messaging, plus pseudo-events for hover, click, door state, world time, darkness and calendar changes.
-- A Monks Active Tile Triggers importer converts an existing tile's actions into a glyph program and reports what still needs manual review.
-- Per-trigger gating: restrict to players or the GM, roll a percent chance, require a minimum number of tokens, apply a cooldown, or require line of sight.
-- 40 ready-made example triggers across audio, messaging, scene, tile, token, variables and logic, applicable from the config UI as a starting point.
+- New trigger events for combat starts, ends, rounds and turns, scene loads, lighting changes, token creation and rotation, and double-right-click.
+- Ability Test and Skill Test can prompt the actor's active owner with the system roll dialog.
+- A linked Tile can trace its opaque pixels into the Region shape.
+- Conditions accept && clauses and new functions for movement, items, rolls, darkness and time of day.
+- Run Macro, Control Tile Video and Change Global Volume gain an Audience option to run on player clients, and Chat Message gains one to whisper to chosen users.
+
+## Bug Fixes
+
+- 6 bugs squashed

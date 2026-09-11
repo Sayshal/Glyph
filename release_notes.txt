@@ -1,13 +1,36 @@
 ## New Features
 
-- 40 ready-made example triggers across audio, messaging, scene, tile, token, variables, tagger, fxmaster, and logic categories, applicable directly from the config UI as a starting point.
-- A History tab logs each trigger's past runs for troubleshooting.
-- A Monks Active Tile Triggers importer converts an existing tile's actions into a glyph program automatically, reporting which actions converted cleanly, which converted partially (e.g. MATT's own `{{value}}` templates need manual rewriting), and which need manual review.
-- A Tile can be linked to its Region so the Region's shape stays synced to the tile automatically.
-- An expression engine for conditions and filters, with built-in functions for distance, line of sight, actor attributes, conditions, items, random chance, counting a collection, and per-behavior variables, plus `any()`/`all()` quantifiers over a collection.
-- Named variables can be stored and read back per trigger, with their own Variables tab and a `variable()` expression function.
-- Optional deeper integrations light up automatically when their module is active: Calendaria (season/weather/moon/calendar), Bondsmith (reputation, faction membership), Tenacity, Minstrel (mood, soundboard, ducking), Peddler (shop, restock, trust/pricing), Hero Mancer (level-up), Don't Forget (reminders), Spell Book, Mindful Encounters (dungeon turns, party budget), Token Light Condition, VG Music, Tagger, and FXMaster weather effects.
-- Over 60 actions spanning tokens (move, rotate, create, delete, add/remove items, toggle conditions, roll tables, target), tiles (change/temp image, video, visibility, occlusion), scenes (pause game, change scene/background, adjust darkness, wall/door state, pan canvas, add to combat, change permissions, run a macro or arbitrary JS), audio (play/stop sound, play playlist), and messaging (chat message, notification, scrolling text, dialogs, open a journal or actor sheet, write to a journal).
-- Per-trigger gating: restrict to players or the GM, roll a percent chance, require a minimum number of tokens, apply a cooldown, track per-token firing, require line of sight, or allow firing while the game is paused.
-- Triggers respond to every core Region event (enter, exit, move, turn, etc.) plus pseudo-events glyph adds itself: hover in/out, click/right-click/double-click, world time or darkness changes, door opened/closed/locked/unlocked/revealed, and calendar-driven events (season, weather, day, moon phase, rest day, calendar event, character created).
-- Visual, node-based trigger editor built into the Region's own behavior config (a Program tab replacing Foundry's generic sheet): build if/else branches, forEach loops, goto/landing jumps, and waits by composing nodes, no macro code or `eval()` required.
+- A linked Tile can trace its opaque pixels into the Region shape.
+- Ability Test and Skill Test gain a Prompt the Player option that opens the system roll dialog for the actor's active owner, falling back to the GM.
+- Attack (dnd5e) gains a Target field and a Card Only option, and rolls damage only on a hit or crit.
+- Audio and visibility actions: Toggle Tile Visibility and Toggle Light/Sound Visibility use a Show/Hide/Toggle state with a tile Fade Duration, Stop Sound gains Fade Out, and Change Global Volume gains Audience.
+- Chat, dialog and journal actions: Chat Message gains chat bubble, Audience and Polyglot Language options and runs slash commands, Show Dialog gains an HTML content file, width, height and form routing to a named handler, and Write to Journal can target a whole entry, create a missing page, and gains Characters to Replace, Break Line After and Language.
+- Combat and time actions: Add to Combat becomes Add or Remove from Combat and rolls initiative when starting combat, Set Game Time gains a Time of Day mode and a formula field, Calendaria adds a Set Date and Time action, and Wait accepts a low-high range of seconds.
+- Conditions accept clauses joined with && and gain movementEnded(), elevationChanged(), moveDirection(), itemCount(), itemQuantity(), hasActor(), roll(), darkness(), timeOfDay(), eventIs() and uniqueTriggerCount().
+- Document actions: Alter Document gains a Set/Add/Remove mode and a formula field, Change Permissions gains Change For and Use Default and writes Token ownership to its Actor, and Change Wall/Door gains Door Type, Toggle on each restriction, and Proximity and Distance sense levels.
+- Flow nodes: Set Current Collection builds a named selection For Each can loop over, Next Item ends the current For Each pass, For Each gains Randomize Order, and Landing gains Stop When Reached.
+- New collections include Controlled Tokens, Tokens Owned By An Active Player, The Active Scene, Currently Playing Sounds, Result Of The Previous Action and scene tiles, walls and drawings, new reference kinds include This Trigger's Tile, Tagger Tag and First Of A Group, and Tagger references match any tag in a comma-separated value.
+- New trigger events: Token Created Inside, Token Rotates Inside, Double-Right-Clicked, Combat Starts, Combat Ends, Combat Round Advances, Combat Turn Starts, Combat Turn Ends, Scene Loads and Canvas Lighting Changes, and click events carry the clicked point and modifier key state.
+- Ping Location, Pan Canvas, Move Token and Create Journal Note accept a document as their location, and Create Journal Note gains Snap To Grid.
+- Run Code exposes token, actor, character, tile, speaker, args, method and pt, and macro, code, roll table and nested trigger results accumulate as {{results.<name>}}.
+- Run Macro gains an Audience option that picks which clients run the macro.
+- The Tile HUD gains a power button that runs a linked trigger's manual handler with the selected token.
+- Tile actions: Change Tile Image gains Any Other in List, Repeat and comma-separated position lists and falls back to the tile's own image list, Preload Tile Images gains Audience and expands wildcard paths, and Control Tile Video gains Toggle, Start Offset and Audience.
+- Token actions: Rotate Token gains Relative, Duration and formula fields and animates Tile, Drawing and Ambient Light rotation, Teleport Token gains Suppress Triggers, Toggle Condition gains an Apply/Remove/Toggle/Clear All mode, Stop Token Movement gains Snap To Grid, and Hurt/Heal gains Roll Mode.
+- Trigger config: restriction splits into Restricted To, gating on the triggering user, and Restricted Tokens, gating on player ownership, and the History tab shows the triggering user, gains a Reset History button and keeps 500 entries instead of 50.
+- Trigger control: Trigger Another Region and Toggle Trigger accept a Region or linked Tile, Trigger Another Region gains Start At Landing, and Stop Remaining Actions can halt another trigger's run.
+
+## Bug Fixes
+
+- Conditions with a quoted comma or comparison operator no longer split incorrectly.
+- On dnd5e, a Hurt/Heal value with a leading minus rolls as healing and heals the token.
+- Play Playlist Next and Previous Track start a stopped playlist.
+- Recipe names and some action labels show their text instead of raw localization keys.
+- Reference fields show their saved value instead of an empty input.
+- The importer no longer swaps damage and healing on Hurt/Heal, reads tile image lists and wall movement restrictions correctly, and no longer converts a decimal delay range into an immediate negative wait.
+
+## Changes
+
+- A For Each with a single supported action runs its iterations together, and most such actions write their changes in one batched update.
+- A wildcard Set Variable with an empty string sets the matching variables to the empty string instead of clearing them.
+- The Monk's Active Tiles importer converts filters, loops, selections, shuffles, dialogs, auto-anchors, door walls, templated and rolled values, clock times, and Tagger and FXMaster actions into native nodes, and reports actions with nothing to convert as skipped.

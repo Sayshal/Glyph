@@ -87,3 +87,19 @@ export function collectLandingTags(node, tags = new Set()) {
   }
   return tags;
 }
+
+/**
+ * Collect every Set Current Collection name reachable anywhere under `node`.
+ * @param {object} node A program node.
+ * @param {Set<string>} [names] Accumulator.
+ * @returns {Set<string>} The accumulated names.
+ */
+export function collectCurrentNames(node, names = new Set()) {
+  if (!node || typeof node !== 'object') return names;
+  if (node.type === 'setCurrent' && typeof node.name === 'string' && node.name) names.add(node.name);
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) value.forEach((n) => collectCurrentNames(n, names));
+    else if (value && typeof value === 'object') collectCurrentNames(value, names);
+  }
+  return names;
+}

@@ -739,7 +739,10 @@ function hurtHealFormula(raw) {
     .replace(/\[\[(?:\/\w+\s+)?(.+?)\]{2,3}(?:\{[^}]*\})?/g, '($1)')
     .replace(/^([-+])\s+/, '$1')
     .trim();
-  return text ? `-(${text})` : '';
+  if (!text) return '';
+  if (!text.startsWith('-')) return `-(${text})`;
+  const damage = text.slice(1).trim();
+  return /[+-]/.test(damage) ? `0 - (${text})` : damage;
 }
 
 /**
