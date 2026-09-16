@@ -1,5 +1,5 @@
 import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
-import { registerHurtHealAdapter, toMessageMode } from '../hurt-heal-adapters.mjs';
+import { registerHurtHealAdapter, splitHealSign, toMessageMode } from '../hurt-heal-adapters.mjs';
 import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
 
 /** pf2e-only */
@@ -32,10 +32,12 @@ export function registerPf2eActions() {
     'pf2e',
     async (actor, formula, { damageType, postCard, rollMode }) => {
       const token = actor.getActiveTokens()[0]?.document ?? null;
+      const { heal, formula: rolled } = splitHealSign(formula);
+      const type = heal ? null : damageType;
       const DamageRoll = CONFIG.Dice.rolls.find((cls) => cls.name === 'DamageRoll');
-      const roll = damageType ? await new DamageRoll(`${formula}[${damageType}]`).evaluate() : await new Roll(formula, actor.getRollData()).evaluate();
+      const roll = type ? await new DamageRoll(`${rolled}[${type}]`).evaluate() : await new Roll(rolled, actor.getRollData()).evaluate();
       if (postCard) await roll.toMessage({ speaker: ChatMessage.getSpeaker({ token }) }, { messageMode: toMessageMode(rollMode) });
-      if (!damageType) return actor.applyDamage({ damage: roll.total, token, skipIWR: true });
+      if (!type) return actor.applyDamage({ damage: heal ? -roll.total : roll.total, token, skipIWR: true });
       await actor.applyDamage({ damage: roll, token, skipIWR: false });
     },
     CONFIG.PF2E.damageTypes

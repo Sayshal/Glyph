@@ -36,6 +36,17 @@ export function toMessageMode(rollMode) {
 }
 
 /**
+ * Split a leading minus sign off a hurt/heal formula, which marks it as healing.
+ * @param {string|number} formula The stored formula.
+ * @returns {{heal: boolean, formula: string|number}} Whether it heals, and the formula without its sign.
+ */
+export function splitHealSign(formula) {
+  const text = String(formula);
+  const heal = /^\s*-/.test(text);
+  return { heal, formula: heal ? text.replace(/^\s*-/, '') : formula };
+}
+
+/**
  * The active game system's damage type key -> localized label choices, if registered.
  * @returns {Record<string, string>|null}
  */

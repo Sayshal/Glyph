@@ -14,7 +14,7 @@ The map does the work.
 
 ---
 
-## Triggers Without Macros
+## Triggers Built Into the Map
 
 Attach a program to a Region and the scene runs it when a token steps through a doorway or a player clicks a lever.
 

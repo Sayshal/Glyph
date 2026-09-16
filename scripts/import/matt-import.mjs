@@ -672,7 +672,7 @@ export function resolvePendingBehaviors(node, behaviorUuidByTileUuid) {
   if (!node || typeof node !== 'object') return node;
   if (node.behavior?.kind === '__pendingBehavior') {
     const uuid = behaviorUuidByTileUuid[node.behavior.value];
-    node.behavior = uuid ? { kind: 'uuid', value: uuid } : null;
+    node.behavior = { kind: 'uuid', value: uuid ?? '' };
   }
   if (node.target?.kind === '__pendingBehavior') node.target = { kind: 'uuid', value: behaviorUuidByTileUuid[node.target.value] ?? node.target.value };
   if (typeof node.condition === 'string') node.condition = node.condition.replace(/__pendingBehavior:([^"]+)/g, (_, tileUuid) => behaviorUuidByTileUuid[tileUuid] ?? tileUuid);

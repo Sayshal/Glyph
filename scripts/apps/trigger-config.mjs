@@ -3,10 +3,19 @@ import { listResolvers } from '../targeting.mjs';
 import { applyTemplate, listTemplates, saveTemplate } from '../templates.mjs';
 import { Combobox } from './combobox.mjs';
 import { buildTree } from './program-tree-builder.mjs';
-import { deleteAtPath, getAtPath, moveAtPath, scaffoldNode } from './program-tree-ops.mjs';
+import { deleteAtPath, getAtPath, moveAtPath, scaffoldNode, widgetDefault } from './program-tree-ops.mjs';
 
 const { DocumentSheetV2 } = foundry.applications.api;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
+
+/** @type {Map<string, string>} Widget kind whose default repairs a missing parent, by the leaf key being written. */
+const PARENT_WIDGET_BY_LEAF = new Map([
+  ['kind', 'reference'],
+  ['value', 'reference'],
+  ['x', 'point'],
+  ['y', 'point'],
+  ['elevation', 'point']
+]);
 
 /** The authoring sheet for `glyph.trigger` RegionBehaviors, replacing the generic RegionBehaviorConfig. */
 export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSheetV2) {
@@ -16,7 +25,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   /** @type {Set<string>} Node paths currently expanded in the Program tab tree. */
   #expanded = new Set();
 
-  /** @type {Map<string, object>} Per-handler tree edits that failed schema validation on save. */
+  /** @type {Map<string, {tree: object, error: string}>} Per-handler tree edits that failed to save, with the reason. */
   #pendingTrees = new Map();
 
   /** @type {Promise} Serializes #mutateHandler calls so overlapping edits don't race. */
@@ -129,7 +138,8 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     context.handlerNames = handlerNames;
     context.selectedHandler = this.#selectedHandler;
     context.hasPendingChanges = this.#pendingTrees.has(this.#selectedHandler);
-    const tree = this.#pendingTrees.get(this.#selectedHandler) ?? system.handlers[this.#selectedHandler] ?? { type: 'sequence', children: [] };
+    context.pendingError = this.#pendingTrees.get(this.#selectedHandler)?.error ?? null;
+    const tree = this.#pendingTrees.get(this.#selectedHandler)?.tree ?? system.handlers[this.#selectedHandler] ?? { type: 'sequence', children: [] };
     context.tree = this.#selectedHandler ? buildTree(tree, this.document, this.#expanded) : null;
   }
 
@@ -138,6 +148,24 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     super._onFirstRender(context, options);
     this.element.addEventListener('click', this.#onTreeClick.bind(this));
     this.element.addEventListener('change', this.#onTreeChange.bind(this), { capture: true });
+    this.element.addEventListener('focusout', this.#onUuidInputBlur.bind(this));
+  }
+
+  /**
+   * Commit a UUID typed into a document-tags input when focus leaves the field without using its add button.
+   * @param {FocusEvent} event The focusout event.
+   */
+  #onUuidInputBlur(event) {
+    const tags = event.target.closest('document-tags');
+    if (!tags || event.target === tags || tags.contains(event.relatedTarget)) return;
+    const uuid = event.target.value?.trim();
+    if (!uuid || !foundry.utils.parseUuid(uuid)) return;
+    event.target.value = '';
+    try {
+      tags.value = uuid;
+    } catch (error) {
+      ui.notifications.error(error.message);
+    }
   }
 
   /** @inheritDoc */
@@ -145,6 +173,10 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     event.preventDefault();
     const form = event.currentTarget;
     await this.#mutationQueue;
+    if (this.#pendingTrees.size) {
+      ui.notifications.error('GLYPH.NOTIFICATIONS.PendingHandlers', { format: { handlers: [...this.#pendingTrees.keys()].join(', ') } });
+      return;
+    }
     const handlersBefore = JSON.stringify(this.document.system.handlers);
     const { handler, closeOnSubmit } = formConfig;
     if (typeof handler === 'function') {
@@ -290,7 +322,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     if (target.matches('.glyph-point-mode')) {
       event.stopPropagation();
       const basePath = target.dataset.path.replace(/\.kind$/, '');
-      await this.#mutateHandler((tree) => foundry.utils.setProperty(tree, basePath, target.value ? { kind: 'uuid', value: '' } : { x: 0, y: 0, elevation: 0 }));
+      await this.#mutateHandler((tree) => foundry.utils.setProperty(tree, basePath, widgetDefault(target.value ? 'reference' : 'point')));
       return this.render({ parts: ['program'] });
     }
     if (target.matches('.glyph-ref-kind')) await this.#syncReferenceKind(target);
@@ -310,10 +342,10 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     } else if (numeric && Array.isArray(value)) value = value.map(Number);
     else if (target.type === 'number') value = Number(value);
     await this.#mutateHandler((tree) => {
-      if (path.endsWith('.kind') || path.endsWith('.value')) {
-        const parentPath = path.slice(0, path.lastIndexOf('.'));
-        if (typeof foundry.utils.getProperty(tree, parentPath) !== 'object') foundry.utils.setProperty(tree, parentPath, { kind: 'uuid', value: '' });
-      }
+      const parentPath = path.slice(0, path.lastIndexOf('.'));
+      const parentWidget = PARENT_WIDGET_BY_LEAF.get(path.slice(parentPath.length + 1));
+      const parent = foundry.utils.getProperty(tree, parentPath);
+      if (parentWidget && (parent === null || typeof parent !== 'object')) foundry.utils.setProperty(tree, parentPath, widgetDefault(parentWidget));
       foundry.utils.setProperty(tree, path, value);
     });
   }
@@ -347,7 +379,9 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
    * @param {(tree: object) => void} mutator Mutates a cloned copy of the handler's tree in place.
    */
   #mutateHandler(mutator) {
-    this.#mutationQueue = this.#mutationQueue.then(() => this.#doMutateHandler(mutator)).catch(() => {});
+    this.#mutationQueue = this.#mutationQueue
+      .then(() => this.#doMutateHandler(mutator))
+      .catch((error) => ui.notifications.error('GLYPH.NOTIFICATIONS.SaveFailed', { format: { error: error.message }, console: true }));
     return this.#mutationQueue;
   }
 
@@ -358,12 +392,13 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   async #doMutateHandler(mutator) {
     const handler = this.#selectedHandler;
     if (!handler) return;
-    const base = this.#pendingTrees.get(handler) ?? this.document.system.handlers[handler] ?? { type: 'sequence', children: [] };
+    const base = this.#pendingTrees.get(handler)?.tree ?? this.document.system.handlers[handler] ?? { type: 'sequence', children: [] };
     const tree = foundry.utils.deepClone(base);
     mutator(tree);
     const validationError = this.#validateTree(handler, tree);
     if (validationError) {
-      this.#pendingTrees.set(handler, tree);
+      this.#pendingTrees.set(handler, { tree, error: validationError.message });
+      ui.notifications.warn('GLYPH.NOTIFICATIONS.NodeInvalid', { format: { error: validationError.message } });
       return this.render({ parts: ['program'] });
     }
     try {
@@ -373,7 +408,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       this.render({ parts: ['program'] });
     } catch (error) {
       ui.notifications.error('GLYPH.NOTIFICATIONS.SaveFailed', { format: { error: error.message } });
-      this.#pendingTrees.set(handler, tree);
+      this.#pendingTrees.set(handler, { tree, error: error.message });
       this.render({ parts: ['program'] });
     }
   }

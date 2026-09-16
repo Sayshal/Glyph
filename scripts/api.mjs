@@ -2,6 +2,7 @@ import { isModuleActive } from './capability.mjs';
 import { MODULE } from './constants.mjs';
 import { runTrigger } from './manual-trigger.mjs';
 import { registerNodeType } from './nodes/registry.mjs';
+import { interpolate, resolveNumber } from './run-context.mjs';
 
 /**
  * Register a custom action node type, namespaced under the caller's own module id.
@@ -19,7 +20,7 @@ function registerAction(moduleId, name, definition) {
  * @returns {object} The API object
  */
 export function createApi() {
-  const api = { registerAction, isModuleActive, runTrigger };
+  const api = { registerAction, isModuleActive, runTrigger, interpolate, resolveNumber };
   game.modules.get(MODULE.ID).api = api;
   globalThis.GLYPH = api;
   return api;

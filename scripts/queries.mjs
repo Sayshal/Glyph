@@ -21,6 +21,19 @@ export function query(user, name, data = {}, options = {}) {
   return user.query(`${MODULE.ID}.${name}`, data, options);
 }
 
+/**
+ * Relay an event to the primary GM, sending `data.token` as a UUID alongside the JSON-safe rest of the payload.
+ * @param {string} name Query name, namespaced as `${MODULE.ID}.${name}`.
+ * @param {object} data Event payload; `data.token`, if present, must be a TokenDocument.
+ * @param {object} [payload] Extra top-level query fields.
+ * @returns {Promise<*>|undefined} The query result, or undefined when no primary GM is connected.
+ */
+export function queryPrimaryGM(name, { token, ...data }, payload = {}) {
+  const gm = ATLAS.primaryGM;
+  if (!gm) return;
+  return query(gm, name, { ...payload, tokenUuid: token?.uuid ?? null, data });
+}
+
 /** @type {Map<string, (data: object) => Promise<*>|*>} Registered render-intent handlers, by name. */
 const renderIntentHandlers = new Map();
 

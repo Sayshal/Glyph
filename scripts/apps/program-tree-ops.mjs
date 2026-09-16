@@ -51,7 +51,16 @@ export function moveAtPath(root, path, offset) {
 }
 
 /** @type {Record<string, *>} Default value per field widget kind, when scaffolding a new node. */
-const WIDGET_DEFAULTS = { boolean: false, number: 0, multiSelect: [], reference: { kind: 'uuid', value: '' } };
+const WIDGET_DEFAULTS = { boolean: false, number: 0, multiSelect: [], reference: { kind: 'uuid', value: '' }, point: { x: 0, y: 0, elevation: 0 } };
+
+/**
+ * A fresh copy of the default value for a field widget kind.
+ * @param {string} widget The widget kind.
+ * @returns {*} The default value, or undefined when the widget has none.
+ */
+export function widgetDefault(widget) {
+  return foundry.utils.deepClone(WIDGET_DEFAULTS[widget]);
+}
 
 /**
  * Build a minimal valid node of `type`, with every slot initialized empty and every field defaulted.
@@ -67,7 +76,7 @@ export function scaffoldNode(type) {
     if (field.widget === 'select' && field.choices) node[field.name] = Object.keys(field.choices)[0];
     else if (field.widget === 'systemAbility') node[field.name] = Object.keys(getAbilityChoices() ?? {})[0] ?? '';
     else if (field.widget === 'systemSkill') node[field.name] = Object.keys(getSkillChoices() ?? {})[0] ?? '';
-    else node[field.name] = WIDGET_DEFAULTS[field.widget] ?? '';
+    else node[field.name] = widgetDefault(field.widget) ?? '';
   }
   return node;
 }

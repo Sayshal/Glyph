@@ -16,6 +16,7 @@
       <p class="glyph-pending-warning"><i class="fa-solid fa-triangle-exclamation"></i>
         {{localize "GLYPH.TREE.pendingWarning"}}
       </p>
+      {{#if pendingError}}<p class="glyph-pending-warning hint">{{pendingError}}</p>{{/if}}
     {{/if}}
     <div class="glyph-tree">{{> "modules/glyph/templates/partials/tree-node.hbs" tree}}</div>
   {{else}}

@@ -1,5 +1,5 @@
 import { registerAbilityTestAdapter } from '../ability-test-adapters.mjs';
-import { registerHurtHealAdapter, toMessageMode } from '../hurt-heal-adapters.mjs';
+import { registerHurtHealAdapter, splitHealSign, toMessageMode } from '../hurt-heal-adapters.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
 import { resolveActorReference, resolveReference } from '../targeting.mjs';
@@ -88,9 +88,8 @@ export function registerDnd5eActions() {
   registerHurtHealAdapter(
     'dnd5e',
     async (actor, formula, { damageType, postCard, rollMode }) => {
-      const heal = /^\s*-/.test(String(formula));
+      const { heal, formula: rolled } = splitHealSign(formula);
       const type = heal ? 'healing' : damageType;
-      const rolled = heal ? String(formula).replace(/^\s*-/, '') : formula;
       const roll = type ? new CONFIG.Dice.DamageRoll(rolled, actor.getRollData(), { type }) : new Roll(rolled, actor.getRollData());
       await roll.evaluate();
       if (postCard) {

@@ -1,5 +1,5 @@
 import { MODULE } from './constants.mjs';
-import { query, registerQuery } from './queries.mjs';
+import { queryPrimaryGM, registerQuery } from './queries.mjs';
 
 /**
  * Dispatch a pseudo-event to every subscribed, non-disabled trigger behavior in `regions`.
@@ -33,10 +33,7 @@ registerQuery('runPseudoEvent', ({ regionUuids, name, tokenUuid, data }, { user 
 function dispatchInteractivePseudoEvent(regions, name, data = {}) {
   if (!regions.length) return;
   if (ATLAS.isPrimaryGM) return dispatchPseudoEvent(regions, name, data);
-  const gm = ATLAS.primaryGM;
-  if (!gm) return;
-  const { token, ...rest } = data;
-  query(gm, 'runPseudoEvent', { regionUuids: regions.map((r) => r.uuid), name, tokenUuid: token?.uuid ?? null, data: rest });
+  queryPrimaryGM('runPseudoEvent', data, { regionUuids: regions.map((r) => r.uuid), name });
 }
 
 const hoveredRegions = new Set();

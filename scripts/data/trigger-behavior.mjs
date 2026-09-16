@@ -176,7 +176,6 @@ export class TriggerRegionBehaviorType extends foundry.data.regionBehaviors.Regi
    */
   async #runQueued(source, handler, options) {
     if (!(await checkGates(this.parent, source.event))) return null;
-    if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, this.parent, source.event) === false) return null;
     const context = createRunContext(source, this.parent);
     if (options.startTag) context.control.goto = options.startTag;
     activeRuns.set(this.parent.uuid, context);

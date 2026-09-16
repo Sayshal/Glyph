@@ -17,6 +17,7 @@ export async function checkGates(behavior, event) {
   if (system.cooldown > 0 && !cooldownElapsed(behavior, system.cooldown)) return false;
   if (system.pertoken && alreadyTriggeredToken(behavior, event)) return false;
   if (system.chance < 100 && Math.random() * 100 >= system.chance) return false;
+  if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, behavior, event) === false) return false;
   await recordSuccess(behavior, event);
   return true;
 }

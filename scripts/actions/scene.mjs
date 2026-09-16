@@ -120,22 +120,25 @@ registerNodeType('resetTriggerHistory', {
   }
 });
 
+registerRenderIntent('viewScene', async ({ sceneUuid }) => (await fromUuid(sceneUuid))?.view());
+
 registerNodeType('changeScene', {
   category: 'scene',
   label: 'GLYPH.ACTIONS.changeScene.label',
   hint: 'GLYPH.ACTIONS.changeScene.hint',
   fields: [
     { name: 'sceneUuid', widget: 'uuid', documentType: 'Scene', label: 'GLYPH.ACTIONS.changeScene.FIELDS.sceneUuid.label', required: true },
-    { name: 'activate', widget: 'boolean', label: 'GLYPH.ACTIONS.changeScene.FIELDS.activate.label' }
+    { name: 'activate', widget: 'boolean', label: 'GLYPH.ACTIONS.changeScene.FIELDS.activate.label' },
+    AUDIENCE_FIELD
   ],
   validate(node) {
     if (typeof node.sceneUuid !== 'string' || !node.sceneUuid) throw new Error('changeScene.sceneUuid must be a non-empty string.');
   },
-  async execute(node) {
+  async execute(node, context) {
     const scene = await fromUuid(node.sceneUuid);
     if (!(scene instanceof Scene)) return;
     if (node.activate && game.user.isGM) await scene.activate();
-    else await scene.view();
+    else await sendToAudience(node.audience, context, 'viewScene', { sceneUuid: scene.uuid });
   }
 });
 
