@@ -2,11 +2,8 @@ This module is pending Foundry approval. You can download it from [here](https:/
 
 ## New Features
 
-- New trigger events for combat starts, ends, rounds and turns, scene loads, lighting changes, token creation and rotation, and double-right-click.
-- Ability Test and Skill Test can prompt the actor's active owner with the system roll dialog.
-- A linked Tile can trace its opaque pixels into the Region shape.
-- Conditions accept && clauses and new functions for movement, items, rolls, darkness and time of day.
-- Run Macro, Control Tile Video and Change Global Volume gain an Audience option to run on player clients, and Chat Message gains one to whisper to chosen users.
+- Change Scene gains an Audience option.
+- The API exposes interpolate and resolveNumber.
 
 ## Bug Fixes
 
