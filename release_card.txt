@@ -1,10 +1,5 @@
 This module is pending Foundry approval. You can download it from [here](https://github.com/Sayshal/glyph/releases/latest/download/module.json).
 
-## New Features
-
-- Change Scene gains an Audience option.
-- The API exposes interpolate and resolveNumber.
-
 ## Bug Fixes
 
-- 6 bugs squashed
+- 2 bugs squashed

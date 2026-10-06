@@ -1,18 +1,8 @@
-## New Features
-
-- Change Scene gains an Audience option.
-- The API exposes interpolate and resolveNumber.
-
 ## Bug Fixes
 
-- Canceling a run from the glyph.preTriggerAction hook no longer starts the cooldown or adds a trigger history entry.
-- Change Scene without Activate for Everyone shows the scene to the triggering user instead of the GM.
-- Document fields add a UUID typed into them when the field loses focus.
-- Manual triggers run by a player or a non-primary GM fire on the primary GM instead of doing nothing.
-- On pf2e, a Hurt/Heal value with a leading minus heals the token.
-- Program tab edits to point and reference fields on new or imported nodes are no longer silently lost, and a failed edit shows an error.
+- On pf2e, Ability Test saves list Fortitude, Reflex and Will in the Ability dropdown, roll through the actor's saves, and hide the Check type.
+- Play Sound with a `*` wildcard path plays one random matching file instead of failing.
 
 ## Changes
 
-- Invalid Program tab edits show a warning and the validation error in the pending banner.
-- Update Behavior does not save or close while a handler has invalid Program tab edits, and names the affected handlers.
+- Canvas drop quick create for a dropped Item, Scene or Macro is off by default behind a new world setting, and Items dragged from an actor sheet no longer create a trigger Tile.
