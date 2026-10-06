@@ -1,4 +1,4 @@
-import { getAbilityChoices } from '../ability-test-adapters.mjs';
+import { getAbilityChoices, getAbilityTestTypes } from '../ability-test-adapters.mjs';
 import { getDamageTypeChoices } from '../hurt-heal-adapters.mjs';
 import { getNodeType, listNodeTypes } from '../nodes/registry.mjs';
 import { getSkillChoices } from '../skill-test-adapters.mjs';
@@ -90,9 +90,20 @@ function buildWidget(field, value, path, ui, node) {
       return { ...base, kind: 'boolean', value: !!value };
     case 'select':
       return { ...base, kind: 'select', choices: normalizeChoices(field.choices), selected: [String(value)] };
-    case 'systemAbility':
+    case 'abilityTestType': {
+      const types = getAbilityTestTypes();
+      const choices = normalizeChoices(field.choices).filter((choice) => !types || types.includes(choice.value) || choice.value === value);
+      return { ...base, kind: 'select', choices, selected: [String(value)] };
+    }
+    case 'systemAbility': {
+      const choices = getAbilityChoices(node.testType);
+      if (!choices) return { ...base, kind: 'text', value: value ?? '' };
+      const options = normalizeChoices(choices);
+      if (value && !(value in choices)) options.push({ value, label: value });
+      return { ...base, kind: 'select', choices: options, selected: [String(value)] };
+    }
     case 'systemSkill': {
-      const choices = field.widget === 'systemAbility' ? getAbilityChoices() : getSkillChoices();
+      const choices = getSkillChoices();
       if (!choices) return { ...base, kind: 'text', value: value ?? '' };
       return { ...base, kind: 'select', choices: normalizeChoices(choices), selected: [String(value)] };
     }

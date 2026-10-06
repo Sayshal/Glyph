@@ -1,4 +1,4 @@
-import { getAbilityTestAdapter } from '../ability-test-adapters.mjs';
+import { getAbilityTestAdapter, getAbilityTestTypes } from '../ability-test-adapters.mjs';
 import { resolveRollPrompter } from '../audience.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerRenderIntent, sendRenderIntent } from '../queries.mjs';
@@ -19,7 +19,7 @@ registerNodeType('abilityTest', {
     { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.abilityTest.FIELDS.actor.label', required: true },
     {
       name: 'testType',
-      widget: 'select',
+      widget: 'abilityTestType',
       label: 'GLYPH.ACTIONS.abilityTest.FIELDS.testType.label',
       required: true,
       choices: { save: 'GLYPH.ABILITY_TEST_TYPE.save', check: 'GLYPH.ABILITY_TEST_TYPE.check' }
@@ -37,6 +37,8 @@ registerNodeType('abilityTest', {
   async execute(node, context) {
     const adapter = getAbilityTestAdapter();
     if (!adapter) throw new Error(`No ability-test adapter is registered for system "${game.system.id}".`);
+    const types = getAbilityTestTypes();
+    if (types && !types.includes(node.testType)) throw new Error(`abilityTest: type "${node.testType}" is not available on ${game.system.id}.`);
     const actor = resolveActorReference(node.actor, context);
     if (!actor) return;
     const result = node.prompt ? await promptRoll(actor, node) : await adapter(actor, node.testType, node.ability, node.dc, false);

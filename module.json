@@ -11,7 +11,7 @@
   "changelog": "https://github.com/Sayshal/glyph/releases",
   "compatibility": {
     "minimum": "14",
-    "verified": "14.367"
+    "verified": "14"
   },
   "description": "Region trigger automation for Foundry: run actions when tokens enter, exit, move, click, or take a turn. A modern replacement for Active Tile Triggers.",
   "documentTypes": {

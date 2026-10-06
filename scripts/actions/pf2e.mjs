@@ -6,15 +6,16 @@ import { registerSkillTestAdapter } from '../skill-test-adapters.mjs';
 export function registerPf2eActions() {
   if (game.system.id !== 'pf2e') return;
 
-  /** `CreaturePF2e#rollAbilityCheck`/`#rollSavingThrow` */
+  /** `CreaturePF2e#saves[slug]` -> `Statistic#roll`; pf2e has no attribute check, so only saves are offered */
   registerAbilityTestAdapter(
     'pf2e',
-    async (actor, type, ability, dc, prompt) => {
-      const method = type === 'check' ? 'rollAbilityCheck' : 'rollSavingThrow';
-      const roll = await actor[method]?.({ ability, dc, skipDialog: !prompt });
+    async (actor, _type, ability, dc, prompt) => {
+      const statistic = actor.saves?.[ability];
+      if (actor.saves && !statistic) throw new Error(`Glyph: "${ability}" is not a pf2e save; pick Fortitude, Reflex or Will.`);
+      const roll = await statistic?.roll({ dc, skipDialog: !prompt });
       return roll ? roll.degreeOfSuccess >= 2 : null;
     },
-    CONFIG.PF2E.abilities
+    { save: CONFIG.PF2E.saves }
   );
 
   /** `CreaturePF2e#skills[slug].check.roll` */

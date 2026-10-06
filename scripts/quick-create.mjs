@@ -1,4 +1,4 @@
-import { MODULE } from './constants.mjs';
+import { MODULE, SETTINGS } from './constants.mjs';
 import { ACTOR, buildTriggerSystem, seq } from './data/trigger-system.mjs';
 import { regionShapeFromTile } from './tile-link.mjs';
 
@@ -32,7 +32,7 @@ async function dropItem(data) {
       click: seq(
         { type: 'toggleTileVisibility', tile: { kind: 'uuid', value: tile.uuid }, mode: 'hide' },
         { type: 'addItem', actor: ACTOR, itemUuid: item.uuid },
-        { type: 'notification', text: `${item.name} added to inventory.`, level: 'info', audience: 'triggeringUser' }
+        { type: 'notification', text: _loc('GLYPH.QUICKCREATE.NOTIFICATIONS.Added', { name: item.name }), level: 'info', audience: 'triggeringUser' }
       )
     }
   });
@@ -66,12 +66,16 @@ async function dropMacro(data) {
   await createLinkedTrigger(canvas.scene, tile, { name: macro.name, pseudoEvents: ['click'], handlers: { click: { type: 'runMacro', macroUuid: macro.uuid } } });
 }
 
-/** Auto-create a trigger Tile when an Item, Scene, or Macro is dropped from the sidebar onto the canvas. */
+/** Auto-create a trigger Tile when an Item, Scene, or Macro is dropped from the sidebar onto the canvas, if the world setting allows it. */
 export function registerQuickCreate() {
   Hooks.on('dropCanvasData', (_canvas, data) => {
-    if (!game.user.isGM || !canvas.scene) return;
-    if (data.type === 'Item') dropItem(data);
-    else if (data.type === 'Scene') dropScene(data);
+    if (!game.user.isGM || !canvas.scene || !game.settings.get(MODULE.ID, SETTINGS.QUICK_CREATE)) return;
+    if (data.type === 'Item') {
+      if (fromUuidSync(data.uuid, { strict: false })?.parent instanceof Actor) return;
+      dropItem(data);
+    } else if (data.type === 'Scene') dropScene(data);
     else if (data.type === 'Macro') dropMacro(data);
+    else return;
+    return false;
   });
 }

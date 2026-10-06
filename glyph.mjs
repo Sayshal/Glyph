@@ -36,12 +36,14 @@ import { registerQuickCreate } from './scripts/quick-create.mjs';
 import { registerRecipesButton } from './scripts/recipes.mjs';
 import { registerReferenceRemap } from './scripts/reference-remap.mjs';
 import { registerRotationAnimation } from './scripts/rotation-animation.mjs';
+import { registerSettings } from './scripts/settings.mjs';
 import { registerTileLink } from './scripts/tile-link.mjs';
 import { registerTriggerLinkEnricher } from './scripts/trigger-link-enricher.mjs';
 import './styles/glyph.css';
 
 Hooks.once('init', () => {
   ATLAS.register(MODULE.ID, { title: MODULE.NAME, github: 'Sayshal/glyph', theme: { scope: '.glyph', default: 'arcane' } });
+  registerSettings();
   foundry.applications.handlebars.loadTemplates([
     `${MODULE.TEMPLATES}/partials/tree-node.hbs`,
     `${MODULE.TEMPLATES}/partials/tree-widget.hbs`,

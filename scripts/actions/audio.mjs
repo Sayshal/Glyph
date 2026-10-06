@@ -4,6 +4,7 @@ import { MODULE } from '../constants.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerRenderIntent } from '../queries.mjs';
 import { resolveReference } from '../targeting.mjs';
+import { expandWildcardPaths } from '../wildcard.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
 
 /** Stop or pause, on this client, every currently-playing Sound matching a source path. */
@@ -24,12 +25,24 @@ registerRenderIntent('playSoundIntent', async ({ src, volume, loop, channel, sce
   if (fadeIn) (await sound)?.fade(volume, { duration: fadeIn * 1000 });
 });
 
+/**
+ * Resolve a configured sound path to one concrete file, picking a random match for "*" wildcards.
+ * @param {string} path The configured path.
+ * @returns {Promise<string>} The file to play.
+ */
+async function resolveSoundPath(path) {
+  if (!path.includes('*')) return path;
+  const files = await expandWildcardPaths([path]);
+  if (!files.length) throw new Error(`playSound: no files match "${path}".`);
+  return files[Math.floor(Math.random() * files.length)];
+}
+
 registerNodeType('playSound', {
   category: 'audio',
   label: 'GLYPH.ACTIONS.playSound.label',
   hint: 'GLYPH.ACTIONS.playSound.hint',
   fields: [
-    { name: 'path', widget: 'file', filePickerType: 'audio', label: 'GLYPH.ACTIONS.playSound.FIELDS.path.label', required: true },
+    { name: 'path', widget: 'file', filePickerType: 'audio', label: 'GLYPH.ACTIONS.playSound.FIELDS.path.label', hint: 'GLYPH.ACTIONS.playSound.FIELDS.path.hint', required: true },
     { name: 'loop', widget: 'boolean', label: 'GLYPH.ACTIONS.playSound.FIELDS.loop.label' },
     { name: 'volume', widget: 'number', min: 0, max: 1, step: 0.05, label: 'GLYPH.ACTIONS.playSound.FIELDS.volume.label' },
     {
@@ -49,12 +62,13 @@ registerNodeType('playSound', {
     if (typeof node.path !== 'string' || !node.path) throw new Error('playSound.path must be a non-empty string.');
   },
   async execute(node, context) {
+    const src = await resolveSoundPath(node.path);
     const volume = node.volume ?? 1;
     const channel = node.channel ?? 'interface';
     const loop = node.loop === true;
     const sceneId = node.restrictToScene ? (context.info.scene?.id ?? null) : null;
     await sendToAudience(node.audience ?? 'everyone', context, 'playSoundIntent', {
-      src: node.path,
+      src,
       volume,
       loop,
       channel,
@@ -68,12 +82,12 @@ registerNodeType('playSound', {
     if (behavior) {
       const tracked = (behavior.getFlag(MODULE.ID, 'activeSounds') ?? []).filter((entry) => entry.key !== key);
       entryId = foundry.utils.randomID();
-      tracked.push({ key, src: node.path, id: entryId });
+      tracked.push({ key, src, id: entryId });
       await behavior.setFlag(MODULE.ID, 'activeSounds', tracked);
     }
     if (loop) return;
     if (!entryId && !node.waitForCompletion) return;
-    const sound = await foundry.audio.AudioHelper.preloadSound(node.path);
+    const sound = await foundry.audio.AudioHelper.preloadSound(src);
     if (entryId && sound?.duration) {
       setTimeout(async () => {
         const current = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
@@ -87,10 +101,11 @@ registerNodeType('playSound', {
     if (node.waitForCompletion && sound?.duration) await new Promise((resolve) => setTimeout(resolve, sound.duration * 1000));
   },
   async batchExecute(pairs) {
+    const srcs = await Promise.all(pairs.map(({ node }) => resolveSoundPath(node.path)));
     await Promise.all(
-      pairs.map(({ node, context }) =>
+      pairs.map(({ node, context }, i) =>
         sendToAudience(node.audience ?? 'everyone', context, 'playSoundIntent', {
-          src: node.path,
+          src: srcs[i],
           volume: node.volume ?? 1,
           loop: node.loop === true,
           channel: node.channel ?? 'interface',
@@ -108,7 +123,7 @@ registerNodeType('playSound', {
         const key = node.key || node.path;
         tracked = tracked.filter((entry) => entry.key !== key);
         const entryId = foundry.utils.randomID();
-        tracked.push({ key, src: node.path, id: entryId });
+        tracked.push({ key, src: srcs[i], id: entryId });
         entryIds[i] = entryId;
       });
       await behavior.setFlag(MODULE.ID, 'activeSounds', tracked);
@@ -118,7 +133,7 @@ registerNodeType('playSound', {
         const entryId = entryIds[i];
         if (node.loop === true) return;
         if (!entryId && !node.waitForCompletion) return;
-        const sound = await foundry.audio.AudioHelper.preloadSound(node.path);
+        const sound = await foundry.audio.AudioHelper.preloadSound(srcs[i]);
         if (entryId && sound?.duration) {
           setTimeout(async () => {
             const current = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];

@@ -5,33 +5,8 @@ import { registerNodeType } from '../nodes/registry.mjs';
 import { registerRenderIntent } from '../queries.mjs';
 import { resolveReference } from '../targeting.mjs';
 import { applyTileTransition } from '../tile-transitions.mjs';
+import { expandWildcardPaths } from '../wildcard.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
-
-/** @type {Map<string, string[]>} Wildcard patterns already expanded. */
-const wildcardCache = new Map();
-
-/**
- * Expand any "*" wildcard entries in a configured image list.
- * @param {string[]} images The configured paths.
- * @returns {Promise<string[]>} The concrete image paths.
- */
-async function expandImagePaths(images) {
-  if (!images.some((path) => path.includes('*'))) return images;
-  const expanded = [];
-  for (const path of images) {
-    if (!path.includes('*')) {
-      expanded.push(path);
-      continue;
-    }
-    if (!wildcardCache.has(path)) {
-      const source = CONFIG.ux.FilePicker.matchS3URL(path) ? 's3' : 'data';
-      const result = await CONFIG.ux.FilePicker.browse(source, path, { wildcard: true }).catch(() => null);
-      wildcardCache.set(path, result?.files ?? []);
-    }
-    expanded.push(...wildcardCache.get(path));
-  }
-  return expanded;
-}
 
 /**
  * A tile's own configured image list.
@@ -53,7 +28,7 @@ function tileImages(tile) {
  * @returns {Promise<string|null>} The resolved image path, or null if `images` is empty.
  */
 async function resolveListImage(tile, select, configured, explicitIndex, randomRange) {
-  const images = await expandImagePaths(configured);
+  const images = await expandWildcardPaths(configured);
   if (!images.length) return null;
   const current = tile.getFlag(MODULE.ID, 'imageIndex') ?? 0;
   let index;
@@ -186,7 +161,7 @@ registerNodeType('preloadTileImages', {
   async execute(node, context) {
     const tile = node.tile ? resolveReference(node.tile, context) : null;
     const configured = Array.isArray(node.images) && node.images.length ? node.images : tileImages(tile);
-    const images = await expandImagePaths(configured.filter((path) => typeof path === 'string' && path));
+    const images = await expandWildcardPaths(configured.filter((path) => typeof path === 'string' && path));
     if (tile?.texture?.src) images.push(tile.texture.src);
     if (!images.length) return;
     await sendToAudience(node.audience ?? 'everyone', context, 'preloadTileImages', { images: [...new Set(images)] });
