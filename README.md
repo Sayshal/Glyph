@@ -2,7 +2,7 @@
 
 The map does the work.
 
-![Glyph Banner](https://raw.githubusercontent.com/Sayshal/glyph/main/banner.png)
+![Glyph Banner](https://wiki.3deathsaves.com/glyph/banner.png)
 
 ![GitHub release](https://img.shields.io/github/v/release/Sayshal/glyph?style=for-the-badge)
 ![GitHub Downloads (specific asset, all releases)](<https://img.shields.io/github/downloads/Sayshal/glyph/module.zip?style=for-the-badge&logo=foundryvirtualtabletop&logoColor=white&logoSize=auto&label=Downloads%20(Total)&color=ff144f>)
@@ -17,6 +17,8 @@ The map does the work.
 ## Triggers Built Into the Map
 
 Attach a program to a Region and the scene runs it when a token steps through a doorway or a player clicks a lever.
+
+![Glyph Hero](https://wiki.3deathsaves.com/glyph/hero.png)
 
 ---
 
@@ -35,8 +37,6 @@ Attach a program to a Region and the scene runs it when a token steps through a 
 <img src="https://wiki.3deathsaves.com/glyph/action-picker.png" alt="Action Picker" width="750">
 
 **System-Aware Actions:** Hurt/Heal takes a dice formula and an optional damage type from the active system's list, and can post the roll as a damage card. Ability Test and Skill Test roll through the system's own pipeline. Enhanced support for D&D5e and PF2e.
-
-<img src="https://wiki.3deathsaves.com/glyph/hurt-heal.png" alt="Hurt/Heal Action" width="750">
 
 **Import From Monk's Active Tile Triggers:** Right-click a scene with Monk's Active Tile Triggers tiles and Glyph converts their actions into program trees. Anything it can't translate gets flagged for manual review.
 
