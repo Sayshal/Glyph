@@ -1,5 +1,3 @@
-This module is pending Foundry approval. You can download it from [here](https://github.com/Sayshal/glyph/releases/latest/download/module.json).
-
 ## Bug Fixes
 
 - 2 bugs squashed
