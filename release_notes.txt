@@ -1,8 +1,4 @@
 ## Bug Fixes
 
-- On pf2e, Ability Test saves list Fortitude, Reflex and Will in the Ability dropdown, roll through the actor's saves, and hide the Check type.
-- Play Sound with a `*` wildcard path plays one random matching file instead of failing.
-
-## Changes
-
-- Canvas drop quick create for a dropped Item, Scene or Macro is off by default behind a new world setting, and Items dragged from an actor sheet no longer create a trigger Tile.
+- A program tree that fails to build or expand now shows an error notification and recovers instead of leaving the trigger config window unopenable.
+- Fixed the Toggle Condition action on systems that store status effects as a keyed object, such as pf2e: the condition picker now lists them, new Toggle Condition nodes default to the first status, and example triggers and recipes use the add mode instead of the legacy active flag.
