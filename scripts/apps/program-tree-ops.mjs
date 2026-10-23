@@ -77,6 +77,7 @@ export function scaffoldNode(type) {
     else if (field.widget === 'abilityTestType') node[field.name] = (getAbilityTestTypes() ?? Object.keys(field.choices))[0];
     else if (field.widget === 'systemAbility') node[field.name] = Object.keys(getAbilityChoices(node.testType) ?? {})[0] ?? '';
     else if (field.widget === 'systemSkill') node[field.name] = Object.keys(getSkillChoices() ?? {})[0] ?? '';
+    else if (field.widget === 'statusEffect') node[field.name] = Object.values(CONFIG.statusEffects)[0]?.id ?? '';
     else node[field.name] = widgetDefault(field.widget) ?? '';
   }
   return node;

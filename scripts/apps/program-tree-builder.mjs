@@ -132,8 +132,14 @@ function buildWidget(field, value, path, ui, node) {
     }
     case 'file':
       return { ...base, kind: 'file', value: value ?? '', filePickerType: field.filePickerType ?? 'image' };
-    case 'statusEffect':
-      return { ...base, kind: 'select', choices: CONFIG.statusEffects.map((s) => ({ value: s.id, label: _loc(s.name) })), selected: [value] };
+    case 'statusEffect': {
+      const effects = Object.values(CONFIG.statusEffects)
+        .map((s) => ({ value: s.id, label: _loc(s.name ?? s.label), order: s.order ?? 0 }))
+        .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, game.i18n.lang));
+      const choices = [{ value: '', label: '' }, ...effects];
+      if (value && !effects.some((s) => s.value === value)) choices.push({ value, label: value });
+      return { ...base, kind: 'select', choices, selected: [value || ''] };
+    }
     case 'fxmasterEffect': {
       const choices = Object.entries(CONFIG.fxmaster?.particleEffects ?? {}).map(([key, effect]) => ({
         value: key,

@@ -175,7 +175,7 @@ export const EXAMPLE_TRIGGERS = [
     category: 'token',
     handlerEvent: 'tokenEnter',
     events: ['tokenEnter'],
-    body: { type: 'toggleCondition', actor: ACTOR, statusId: 'prone', active: true }
+    body: { type: 'toggleCondition', actor: ACTOR, statusId: 'prone', mode: 'add' }
   }),
   example({
     id: 'rollTable',

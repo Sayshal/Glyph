@@ -72,7 +72,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
-            tokenEnter: seq({ type: 'toggleCondition', actor: ACTOR, statusId: 'prone', active: true }, { type: 'chatMessage', text: 'A trap springs on {{token.name}}!' })
+            tokenEnter: seq({ type: 'toggleCondition', actor: ACTOR, statusId: 'prone', mode: 'add' }, { type: 'chatMessage', text: 'A trap springs on {{token.name}}!' })
           }
         })
       }
@@ -89,7 +89,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
-            tokenEnter: seq({ type: 'toggleCondition', actor: ACTOR, statusId: 'poisoned', active: true }, { type: 'chatMessage', text: 'A cloud of poison gas engulfs {{token.name}}!' })
+            tokenEnter: seq({ type: 'toggleCondition', actor: ACTOR, statusId: 'poisoned', mode: 'add' }, { type: 'chatMessage', text: 'A cloud of poison gas engulfs {{token.name}}!' })
           }
         })
       }
@@ -107,7 +107,7 @@ export const RECIPES = [
           events: ['tokenEnter'],
           handlers: {
             tokenEnter: seq(
-              { type: 'forEach', collection: 'within', body: [{ type: 'toggleCondition', actor: ITEM_ACTOR, statusId: 'prone', active: true }] },
+              { type: 'forEach', collection: 'within', body: [{ type: 'toggleCondition', actor: ITEM_ACTOR, statusId: 'prone', mode: 'add' }] },
               { type: 'chatMessage', text: 'A pressure plate trips - everyone standing here stumbles!' }
             )
           }
@@ -162,7 +162,7 @@ export const RECIPES = [
           handlers: {
             tokenEnter: seq(
               { type: 'hurtHeal', actor: ACTOR, value: '1d6', damageType: 'bludgeoning', chatCard: true },
-              { type: 'toggleCondition', actor: ACTOR, statusId: 'prone', active: true },
+              { type: 'toggleCondition', actor: ACTOR, statusId: 'prone', mode: 'add' },
               { type: 'chatMessage', text: '{{token.name}} falls into a hidden pit!' }
             )
           }

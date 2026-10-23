@@ -140,7 +140,16 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     context.hasPendingChanges = this.#pendingTrees.has(this.#selectedHandler);
     context.pendingError = this.#pendingTrees.get(this.#selectedHandler)?.error ?? null;
     const tree = this.#pendingTrees.get(this.#selectedHandler)?.tree ?? system.handlers[this.#selectedHandler] ?? { type: 'sequence', children: [] };
-    context.tree = this.#selectedHandler ? buildTree(tree, this.document, this.#expanded) : null;
+    if (!this.#selectedHandler) context.tree = null;
+    else {
+      try {
+        context.tree = buildTree(tree, this.document, this.#expanded);
+      } catch (error) {
+        this.#expanded.clear();
+        ui.notifications.error('GLYPH.NOTIFICATIONS.RenderFailed', { format: { error: error.message }, console: true });
+        context.tree = buildTree(tree, this.document, this.#expanded);
+      }
+    }
   }
 
   /** @inheritDoc */
@@ -224,9 +233,17 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
     event.preventDefault();
     const { lineAction, path, slotPath, index } = action.dataset;
     if (lineAction === 'toggle-node') {
-      if (this.#expanded.has(path)) this.#expanded.delete(path);
-      else this.#expanded.add(path);
-      return this.render({ parts: ['program'] });
+      if (this.#expanded.has(path)) {
+        this.#expanded.delete(path);
+        return this.render({ parts: ['program'] });
+      }
+      this.#expanded.add(path);
+      try {
+        return await this.render({ parts: ['program'] });
+      } catch (error) {
+        this.#expanded.delete(path);
+        ui.notifications.error('GLYPH.NOTIFICATIONS.RenderFailed', { format: { error: error.message }, console: true });
+      }
     }
     if (lineAction === 'add-slot') return this.#mutateHandler((tree) => foundry.utils.setProperty(tree, slotPath, []));
     if (lineAction === 'remove-slot') return this.#mutateHandler((tree) => deleteAtPath(tree, slotPath));
