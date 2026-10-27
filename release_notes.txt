@@ -1,4 +1,5 @@
 ## Bug Fixes
 
-- A program tree that fails to build or expand now shows an error notification and recovers instead of leaving the trigger config window unopenable.
-- Fixed the Toggle Condition action on systems that store status effects as a keyed object, such as pf2e: the condition picker now lists them, new Toggle Condition nodes default to the first status, and example triggers and recipes use the add mode instead of the legacy active flag.
+- Minstrel `activeMood()` works again with Minstrel's stacking mood system and returns the name of the most recently started mood, or null when none is active.
+- Set Mood (Minstrel) works again with Minstrel's stacking mood system, and Stop with a blank Mood Id stops all active moods.
+- Set Shop Goodwill (Peddler) works again with Peddler's goodwill system and now requires a Character, setting that character's base goodwill with the shop.
