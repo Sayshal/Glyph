@@ -19,8 +19,8 @@ export function registerMinstrelActions() {
       }
     ],
     async execute(node) {
-      if (node.mode === 'stop') await MINSTREL.moods.stop(node.moodId || undefined);
-      else if (node.moodId) await MINSTREL.moods.apply(node.moodId);
+      if (node.mode === 'stop') await (node.moodId ? MINSTREL.runtime.stop(node.moodId) : MINSTREL.runtime.stopAll());
+      else if (node.moodId) await MINSTREL.runtime.apply(node.moodId);
     }
   });
 

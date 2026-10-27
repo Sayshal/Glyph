@@ -66,15 +66,18 @@ export function registerPeddlerActions() {
     hint: 'GLYPH.ACTIONS.peddlerSetTrust.hint',
     fields: [
       { name: 'shop', widget: 'reference', label: 'GLYPH.ACTIONS.peddlerSetTrust.FIELDS.shop.label', required: true },
+      { name: 'buyer', widget: 'reference', label: 'GLYPH.ACTIONS.peddlerSetTrust.FIELDS.buyer.label', required: true },
       { name: 'value', widget: 'number', label: 'GLYPH.ACTIONS.peddlerSetTrust.FIELDS.value.label', required: true }
     ],
     validate(node) {
       if (typeof node.shop !== 'object') throw new Error('peddlerSetTrust.shop must be a reference object.');
+      if (typeof node.buyer !== 'object') throw new Error('peddlerSetTrust.buyer must be a reference object.');
       if (typeof node.value !== 'number') throw new Error('peddlerSetTrust.value must be a number.');
     },
     async execute(node, context) {
       const shop = resolveReference(node.shop, context);
-      if (shop) await Peddler.setTrust(shop, node.value);
+      const buyer = resolveReference(node.buyer, context);
+      if (shop && buyer) await Peddler.setGoodwillBase(shop, buyer, node.value);
     }
   });
 }

@@ -328,7 +328,7 @@ const FUNCTIONS = {
   bondsmithRep: ([id, type]) => (isModuleActive('bondsmith') ? BONDSMITH.api.reputation.get(id, type) : 0),
   lightLevel: ([ref]) => (isModuleActive('tokenlightcondition') ? TLC.api.getLightLevel(ref?.object ?? ref) : null),
   effectiveLightLevel: ([ref]) => (isModuleActive('tokenlightcondition') ? TLC.api.getEffectiveLightLevel(ref?.object ?? ref) : null),
-  activeMood: () => (isModuleActive('minstrel') ? MINSTREL.moods.active() : null),
+  activeMood: () => (isModuleActive('minstrel') ? (MINSTREL.runtime.moodDef(MINSTREL.runtime.active().at(-1)?.moodId)?.name ?? null) : null),
   peddlerTrust: ([ref]) => (isModuleActive('peddler') ? (Peddler.getTrust(toActor(ref))?.value ?? 0) : 0),
   pendingApprovals: () => (isModuleActive('hero-mancer') ? HEROMANCER.api.getPendingSubmissions().length : 0)
 };
