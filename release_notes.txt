@@ -1,5 +1,24 @@
+## New Features
+
+- Editing a tile-linked Region's shape by hand shows a warning that the shape follows its Tile.
+- Move Token moves a token to another level when the destination names a level.
+- New Move Tile action moves a Tile so its center sits on a point, with an optional duration for a timed slide.
+- Polygon Regions have vertex handles: drag a vertex to move it, drag an edge midpoint to add one, right-click a vertex to remove it.
+- The Active Tiles importer converts Move Token actions aimed at a Tile into Move Tile.
+
 ## Bug Fixes
 
-- Minstrel `activeMood()` works again with Minstrel's stacking mood system and returns the name of the most recently started mood, or null when none is active.
-- Set Mood (Minstrel) works again with Minstrel's stacking mood system, and Stop with a blank Mood Id stops all active moods.
-- Set Shop Goodwill (Peddler) works again with Peddler's goodwill system and now requires a Character, setting that character's base goodwill with the shop.
+- Adding or removing trigger events saves immediately, and a newly added event is selected in the Program tab.
+- dnd5e Attack action applies the Fast Forward setting to the attack and damage roll dialogs.
+- dnd5e Attack action no longer logs a deprecation warning for the global Token class.
+- dnd5e Attack action uses the first attack or attack-like activity that can roll an attack, and falls back to using the item when none can.
+- Quick Create centers new Tiles on the drop point.
+- Quick Create warnings are now localized.
+- Regions traced from a Tile image line up with the Tile instead of sitting offset from it.
+- The Active Tiles importer checks door walls against the Tile's actual bounds.
+- Tile-Region sync runs on the active GM only, avoiding duplicate updates when several clients are connected.
+- Unsaved General tab edits are no longer wiped when the program, events or flags update.
+
+## Changes
+
+- A trigger that fires writes its attempt count, cooldown time and fire history in one update instead of two.
