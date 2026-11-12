@@ -28,7 +28,7 @@ export function regionShapesFromTile(tile, traceAlpha) {
  * @returns {Promise<void>}
  */
 async function syncRegionToTile(region, tile, behavior) {
-  await region.update({ shapes: regionShapesFromTile(tile, behavior?.system?.traceAlpha) });
+  await region.update({ shapes: regionShapesFromTile(tile, behavior?.system?.traceAlpha) }, { [MODULE.ID]: { tileSync: true } });
 }
 
 /**
@@ -64,14 +64,21 @@ export function toTriggerBehavior(ref) {
 /** Register Tile-Region auto-linking: a linked Region's shape stays in sync with its Tile. */
 export function registerTileLink() {
   Hooks.on('updateTile', (tile, changed) => {
+    if (!game.users.activeGM?.isSelf) return;
     if (!['x', 'y', 'width', 'height', 'rotation', 'texture'].some((key) => key in changed)) return;
     for (const behavior of behaviorsLinkedTo(tile.parent, tile.uuid)) syncRegionToTile(behavior.region, tile, behavior);
   });
 
   Hooks.on('updateRegionBehavior', async (behavior, changed) => {
+    if (!game.users.activeGM?.isSelf) return;
     const system = changed.system ?? {};
     if (behavior.type !== MODULE.BEHAVIOR_TYPE || !('linkedTile' in system || 'traceAlpha' in system)) return;
     const tile = await fromUuid(behavior.system.linkedTile?.value);
     if (tile) await syncRegionToTile(behavior.region, tile, behavior);
+  });
+
+  Hooks.on('updateRegion', (region, changed, options, userId) => {
+    if (userId !== game.user.id || !('shapes' in changed) || options[MODULE.ID]?.tileSync) return;
+    if (region.behaviors.some((behavior) => behavior.type === MODULE.BEHAVIOR_TYPE && behavior.system.linkedTile)) ui.notifications.warn('GLYPH.NOTIFICATIONS.RegionFollowsTile', { localize: true });
   });
 }

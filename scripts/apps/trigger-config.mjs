@@ -121,6 +121,14 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
   }
 
   /** @inheritDoc */
+  _configureRenderOptions(options) {
+    super._configureRenderOptions(options);
+    if (options.renderContext !== `update${this.document.documentName}` || !options.renderData) return;
+    const changed = Object.keys(foundry.utils.flattenObject(options.renderData));
+    if (changed.every((key) => /^(?:_id|_stats|flags|system\.(?:handlers|events|pseudoEvents))\b/.test(key))) options.parts = options.parts.filter((part) => part !== 'general');
+  }
+
+  /** @inheritDoc */
   async _preparePartContext(partId, context, options) {
     context = await super._preparePartContext(partId, context, options);
     if (partId in context.tabs) context.tab = context.tabs[partId];
@@ -330,6 +338,13 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       event.stopPropagation();
       this.#selectedHandler = target.value;
       return this.render({ parts: ['program'] });
+    }
+    const eventField = target.name?.match(/(?:^|\.)(events|pseudoEvents)$/)?.[1];
+    if (eventField) {
+      event.stopPropagation();
+      const added = target.value.filter((name) => !this.document.system[eventField].has(name));
+      if (added.length) this.#selectedHandler = added[0];
+      return this.document.update({ [`system.${eventField}`]: target.value });
     }
     if (target.matches('.glyph-linked-tile')) {
       event.stopPropagation();

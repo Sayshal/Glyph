@@ -167,15 +167,15 @@ export function alphaShapesFromTile(tile) {
   const scaleY = tile.height / alpha.height;
   const cos = Math.cos(Math.toRadians(tile.rotation));
   const sin = Math.sin(Math.toRadians(tile.rotation));
-  const pivotX = tile.x + tile.width * tile.texture.anchorX;
-  const pivotY = tile.y + tile.height * tile.texture.anchorY;
+  const originX = tile.width * tile.texture.anchorX;
+  const originY = tile.height * tile.texture.anchorY;
 
   return contours.map((contour) => {
     const points = [];
     for (const point of contour) {
-      const localX = tile.x + (alpha.minX + point.x) * scaleX - pivotX;
-      const localY = tile.y + (alpha.minY + point.y) * scaleY - pivotY;
-      points.push(pivotX + localX * cos - localY * sin, pivotY + localX * sin + localY * cos);
+      const localX = (alpha.minX + point.x) * scaleX - originX;
+      const localY = (alpha.minY + point.y) * scaleY - originY;
+      points.push(tile.x + localX * cos - localY * sin, tile.y + localX * sin + localY * cos);
     }
     return { type: 'polygon', points, hole: signedArea(contour) < 0 };
   });

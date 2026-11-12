@@ -67,20 +67,20 @@ export function registerDnd5eActions() {
       const item = actor?.items.get(node.itemId);
       if (!item) return;
       const target = node.target ? resolveReference(node.target, context) : null;
-      const targetToken = target instanceof TokenDocument ? target.object : target instanceof Token ? target : null;
+      const targetToken = target instanceof TokenDocument ? target.object : target instanceof foundry.canvas.placeables.Token ? target : null;
       targetToken?.setTarget(true, { releaseOthers: true });
       const message = { create: node.chatCard !== false };
       if (node.rollMode) message.rollMode = node.rollMode;
       const dialog = { configure: node.fastForward === false };
-      const activity = item.system.activities?.getByType?.('attack')?.[0];
+      const activity = item.system.activities?.getByType('attack').find((candidate) => candidate.rollAttack);
       if (!activity) {
         await item.use({}, dialog, message);
         return;
       }
       const results = await activity.use({ subsequentActions: false }, dialog, message);
       if (!results || node.cardOnly) return;
-      const rolls = await activity.rollAttack({ event: context.info.event }, {}, { data: { system: { origin: results.message?.id } } });
-      if (node.rollDamage && attackHits(rolls, targetToken)) await activity.rollDamage({ event: context.info.event }, {}, message);
+      const rolls = await activity.rollAttack({ event: context.info.event }, dialog, { data: { system: { origin: results.message?.id } } });
+      if (node.rollDamage && attackHits(rolls, targetToken)) await activity.rollDamage({ event: context.info.event }, dialog, message);
     }
   });
 

@@ -21,9 +21,9 @@ async function createLinkedTrigger(scene, tile, trigger) {
  */
 async function dropItem(data) {
   const item = await fromUuid(data.uuid);
-  if (!item) return ui.notifications.warn('GLYPH.QUICKCREATE.NOTIFICATIONS.NoItem');
+  if (!item) return ui.notifications.warn('GLYPH.QUICKCREATE.NOTIFICATIONS.NoItem', { localize: true });
   const size = canvas.scene.dimensions.size;
-  const [tile] = await canvas.scene.createEmbeddedDocuments('Tile', [{ x: data.x - size / 2, y: data.y - size / 2, width: size, height: size, texture: { src: item.img } }]);
+  const [tile] = await canvas.scene.createEmbeddedDocuments('Tile', [{ x: data.x, y: data.y, width: size, height: size, texture: { src: item.img } }]);
   await createLinkedTrigger(canvas.scene, tile, {
     name: item.name,
     pseudoEvents: ['click'],
@@ -45,9 +45,9 @@ async function dropItem(data) {
  */
 async function dropScene(data) {
   const scene = await fromUuid(data.uuid);
-  if (!scene) return ui.notifications.warn('GLYPH.QUICKCREATE.NOTIFICATIONS.NoScene');
+  if (!scene) return ui.notifications.warn('GLYPH.QUICKCREATE.NOTIFICATIONS.NoScene', { localize: true });
   const size = canvas.scene.dimensions.size;
-  const [tile] = await canvas.scene.createEmbeddedDocuments('Tile', [{ x: data.x - size / 2, y: data.y - size / 2, width: size, height: size, texture: { src: scene.thumb } }]);
+  const [tile] = await canvas.scene.createEmbeddedDocuments('Tile', [{ x: data.x, y: data.y, width: size, height: size, texture: { src: scene.thumb } }]);
   await createLinkedTrigger(canvas.scene, tile, { name: scene.name, pseudoEvents: ['click'], handlers: { click: { type: 'changeScene', sceneUuid: scene.uuid, activate: false } } });
 }
 
@@ -58,11 +58,9 @@ async function dropScene(data) {
  */
 async function dropMacro(data) {
   const macro = await fromUuid(data.uuid);
-  if (!macro) return ui.notifications.warn('GLYPH.QUICKCREATE.NOTIFICATIONS.NoMacro');
+  if (!macro) return ui.notifications.warn('GLYPH.QUICKCREATE.NOTIFICATIONS.NoMacro', { localize: true });
   const size = canvas.scene.dimensions.size;
-  const [tile] = await canvas.scene.createEmbeddedDocuments('Tile', [
-    { x: data.x - size / 2, y: data.y - size / 2, width: size, height: size, texture: { src: macro.img || 'icons/svg/dice-target.svg' } }
-  ]);
+  const [tile] = await canvas.scene.createEmbeddedDocuments('Tile', [{ x: data.x, y: data.y, width: size, height: size, texture: { src: macro.img || 'icons/svg/dice-target.svg' } }]);
   await createLinkedTrigger(canvas.scene, tile, { name: macro.name, pseudoEvents: ['click'], handlers: { click: { type: 'runMacro', macroUuid: macro.uuid } } });
 }
 
