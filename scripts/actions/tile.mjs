@@ -3,7 +3,7 @@ import { batchUpdate } from '../batch.mjs';
 import { MODULE } from '../constants.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerRenderIntent } from '../queries.mjs';
-import { resolveReference } from '../targeting.mjs';
+import { resolvePoint, resolveReference } from '../targeting.mjs';
 import { applyTileTransition } from '../tile-transitions.mjs';
 import { expandWildcardPaths } from '../wildcard.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
@@ -318,3 +318,42 @@ registerNodeType('setTileOcclusion', {
     await batchUpdate(pairs.map(({ node, context }) => ({ doc: resolveReference(node.tile, context), changes: { 'occlusion.modes': node.modes } })));
   }
 });
+
+registerNodeType('moveTile', {
+  category: 'tile',
+  label: 'GLYPH.ACTIONS.moveTile.label',
+  hint: 'GLYPH.ACTIONS.moveTile.hint',
+  fields: [
+    { name: 'tile', widget: 'reference', label: 'GLYPH.ACTIONS.moveTile.FIELDS.tile.label', required: true },
+    { name: 'destination', widget: 'point', label: 'GLYPH.ACTIONS.moveTile.FIELDS.destination.label', hint: 'GLYPH.ACTIONS.FIELDS.worldPoint.hint', required: true },
+    { name: 'duration', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.moveTile.FIELDS.duration.label', hint: 'GLYPH.ACTIONS.moveTile.FIELDS.duration.hint' }
+  ],
+  validate(node) {
+    if (typeof node.tile !== 'object' || typeof node.destination !== 'object') throw new Error('moveTile.tile and moveTile.destination must be objects.');
+  },
+  async execute(node, context) {
+    const tile = resolveReference(node.tile, context);
+    const destination = resolvePoint(node.destination, context);
+    if (!tile || !destination) return;
+    const changes = { x: Math.round(destination.x - (0.5 - tile.texture.anchorX) * tile.width), y: Math.round(destination.y - (0.5 - tile.texture.anchorY) * tile.height) };
+    const options = node.duration ? { animation: { duration: node.duration }, [MODULE.ID]: { moveFrom: { x: tile.x, y: tile.y } } } : undefined;
+    await tile.update(changes, options);
+  }
+});
+
+/** Slide a Tile to its new position over time, driven by the update options `moveTile` sends. */
+export function registerTileMoveAnimation() {
+  Hooks.on('updateTile', (tile, changed, options) => {
+    const from = options?.[MODULE.ID]?.moveFrom;
+    const duration = options?.animation?.duration;
+    const target = tile.object?.mesh ?? tile.object?.bg;
+    if (!from || !duration || !target || !('x' in changed || 'y' in changed)) return;
+    foundry.canvas.animation.CanvasAnimation.animate(
+      [
+        { parent: target.position, attribute: 'x', from: from.x, to: tile.x },
+        { parent: target.position, attribute: 'y', from: from.y, to: tile.y }
+      ],
+      { duration }
+    );
+  });
+}

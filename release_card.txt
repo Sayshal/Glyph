@@ -1,3 +1,10 @@
+## New Features
+
+- Move Token moves a token to another level when the destination names a level.
+- New Move Tile action moves a Tile so its center sits on a point, with an optional timed slide.
+- Polygon Regions have vertex handles for moving, adding and removing points.
+- The Active Tiles importer converts Move Token actions aimed at a Tile into Move Tile.
+
 ## Bug Fixes
 
-- 3 bugs squashed
+- 10 bugs squashed

@@ -22,7 +22,9 @@ registerNodeType('moveToken', {
     const token = resolveReference(node.token, context);
     const destination = resolvePoint(node.destination, context);
     if (!token || !destination) return;
-    await token.move(node.snap ? token.getSnappedPosition(destination) : destination);
+    const position = node.snap ? token.getSnappedPosition(destination) : destination;
+    const changesLevel = destination.level !== undefined && destination.level !== token.level;
+    await token.move(changesLevel ? { ...position, level: destination.level, action: 'displace' } : position);
   }
 });
 

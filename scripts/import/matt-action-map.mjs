@@ -215,7 +215,14 @@ export const ACTION_MAP = {
     }
   },
   movetoken: {
-    convert: (data) => ({ type: 'moveToken', token: requireRef(data.entity), destination: requirePoint(data.location), snap: !!data.snap }),
+    convert: (data) => {
+      const ref = requireRef(data.entity);
+      const destination = requirePoint(data.location);
+      if (ref.kind === 'linkedTile' || (ref.kind === 'uuid' && /\.Tile\./.test(ref.value))) {
+        return { type: 'moveTile', tile: ref, destination, duration: data.duration ? Math.round(Number(data.duration) * 1000) : undefined };
+      }
+      return { type: 'moveToken', token: ref, destination, snap: !!data.snap };
+    },
     partial: (data) => crossSceneNote(data.location)
   },
   rotation: {

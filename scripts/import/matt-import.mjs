@@ -773,7 +773,7 @@ function doorWallNamesTile(entity, tile, wall) {
   if (!id) return false;
   if (id === 'within') {
     const [x1, y1, x2, y2] = wall.c;
-    return new PIXI.Rectangle(tile.x, tile.y, tile.width, tile.height).lineSegmentIntersects({ x: x1, y: y1 }, { x: x2, y: y2 }, { inside: true });
+    return tile.shape.bounds.lineSegmentIntersects({ x: x1, y: y1 }, { x: x2, y: y2 }, { inside: true });
   }
   if (id.startsWith('tagger')) return isModuleActive('tagger') && Tagger.getByTag(id.substring(7), { matchAny: true }).includes(tile);
   return id === tile.uuid;

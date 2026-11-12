@@ -13,13 +13,29 @@ export async function checkGates(behavior, event) {
   if (system.vision && !hasVision(event)) return false;
   if (!ATLAS.isPrimaryGM) return false;
   if (game.paused && !system.allowPaused) return false;
-  if (!(await recordAttempt(behavior, system.minRequired))) return false;
+  const count = (behavior.getFlag(MODULE.ID, 'triggerCount') ?? 0) + 1;
+  if (!passesAttemptGates(behavior, event, system, count)) {
+    await behavior.setFlag(MODULE.ID, 'triggerCount', count);
+    return false;
+  }
+  await recordSuccess(behavior, event, count);
+  return true;
+}
+
+/**
+ * Gates evaluated once an attempt is counted. The count is written with the outcome, in one update.
+ * @param {RegionBehavior} behavior The trigger behavior document.
+ * @param {RunSource['event']} event A normalized run source's event.
+ * @param {object} system The behavior's system data.
+ * @param {number} count The attempt count including this attempt.
+ * @returns {boolean}
+ */
+function passesAttemptGates(behavior, event, system, count) {
+  if (count < system.minRequired) return false;
   if (system.cooldown > 0 && !cooldownElapsed(behavior, system.cooldown)) return false;
   if (system.pertoken && alreadyTriggeredToken(behavior, event)) return false;
   if (system.chance < 100 && Math.random() * 100 >= system.chance) return false;
-  if (Hooks.call(MODULE.HOOKS.PRE_TRIGGER, behavior, event) === false) return false;
-  await recordSuccess(behavior, event);
-  return true;
+  return Hooks.call(MODULE.HOOKS.PRE_TRIGGER, behavior, event) !== false;
 }
 
 /**
@@ -59,18 +75,6 @@ function hasVision(event) {
 }
 
 /**
- * Increment the attempt counter and report whether `minRequired` has been reached.
- * @param {RegionBehavior} behavior The trigger behavior document.
- * @param {number} minRequired The configured minimum attempt count.
- * @returns {Promise<boolean>} Whether the attempt count meets `minRequired`.
- */
-async function recordAttempt(behavior, minRequired) {
-  const count = (behavior.getFlag(MODULE.ID, 'triggerCount') ?? 0) + 1;
-  await behavior.setFlag(MODULE.ID, 'triggerCount', count);
-  return count >= minRequired;
-}
-
-/**
  * Whether at least `cooldown` in-game seconds have passed since the last successful fire.
  * @param {RegionBehavior} behavior The trigger behavior document.
  * @param {number} cooldown The configured cooldown, in seconds.
@@ -98,16 +102,17 @@ function alreadyTriggeredToken(behavior, event) {
 const HISTORY_CAP = 500;
 
 /**
- * Record a successful fire: reset the cooldown clock and append (capped) history.
+ * Record a successful fire in one update: the attempt count, the cooldown clock and history.
  * @param {RegionBehavior} behavior The trigger behavior document.
  * @param {object} event The event that fired.
+ * @param {number} count The attempt count including this attempt.
  * @returns {Promise<void>}
  */
-async function recordSuccess(behavior, event) {
+async function recordSuccess(behavior, event, count) {
   const history = behavior.getFlag(MODULE.ID, 'history') ?? [];
-  const tokenId = event.data?.token?.id ?? null;
-  history.push({ tokenId, userId: event.user?.id ?? null, name: event.name, time: Date.now() });
+  history.push({ tokenId: event.data?.token?.id ?? null, userId: event.user?.id ?? null, name: event.name, time: Date.now() });
   await behavior.update({
+    [`flags.${MODULE.ID}.triggerCount`]: count,
     [`flags.${MODULE.ID}.lastTriggered`]: game.time.worldTime,
     [`flags.${MODULE.ID}.history`]: history.slice(-HISTORY_CAP)
   });
