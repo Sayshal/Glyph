@@ -102,24 +102,20 @@ function alreadyTriggeredToken(behavior, event) {
 const HISTORY_CAP = 500;
 
 /**
- * Record a successful fire in one update: the attempt count, the cooldown clock and, for per-token triggers, history.
- * History is the only per-token memory, and resending it on every fire of a busy trigger is the costly part.
+ * Record a successful fire in one update: the attempt count, the cooldown clock and history.
  * @param {RegionBehavior} behavior The trigger behavior document.
  * @param {object} event The event that fired.
  * @param {number} count The attempt count including this attempt.
  * @returns {Promise<void>}
  */
 async function recordSuccess(behavior, event, count) {
-  const changes = {
+  const history = behavior.getFlag(MODULE.ID, 'history') ?? [];
+  history.push({ tokenId: event.data?.token?.id ?? null, userId: event.user?.id ?? null, name: event.name, time: Date.now() });
+  await behavior.update({
     [`flags.${MODULE.ID}.triggerCount`]: count,
-    [`flags.${MODULE.ID}.lastTriggered`]: game.time.worldTime
-  };
-  if (behavior.system.pertoken) {
-    const history = behavior.getFlag(MODULE.ID, 'history') ?? [];
-    history.push({ tokenId: event.data?.token?.id ?? null, userId: event.user?.id ?? null, name: event.name, time: Date.now() });
-    changes[`flags.${MODULE.ID}.history`] = history.slice(-HISTORY_CAP);
-  }
-  await behavior.update(changes);
+    [`flags.${MODULE.ID}.lastTriggered`]: game.time.worldTime,
+    [`flags.${MODULE.ID}.history`]: history.slice(-HISTORY_CAP)
+  });
 }
 
 /**
