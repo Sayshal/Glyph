@@ -1,7 +1,7 @@
 import { resolveAudience, sendToAudience } from '../audience.mjs';
 import { batchCreate, batchUpdate } from '../batch.mjs';
 import { MODULE } from '../constants.mjs';
-import { withTriggersSuppressed } from '../gates.mjs';
+import { historyResetChanges, withTriggersSuppressed } from '../gates.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerRenderIntent, sendRenderIntent } from '../queries.mjs';
 import { resolveNumber, setResult } from '../run-context.mjs';
@@ -107,14 +107,14 @@ registerNodeType('resetTriggerHistory', {
   async execute(node, context) {
     const target = node.behavior ? resolveReference(node.behavior, context) : context.info.behavior;
     if (!(target instanceof RegionBehavior) || target.type !== MODULE.BEHAVIOR_TYPE) return;
-    await target.update({ [`flags.${MODULE.ID}.history`]: [], [`flags.${MODULE.ID}.triggerCount`]: 0 });
+    await target.update(historyResetChanges());
   },
   async batchExecute(pairs) {
     await batchUpdate(
       pairs.map(({ node, context }) => {
         const target = node.behavior ? resolveReference(node.behavior, context) : context.info.behavior;
         const valid = target instanceof RegionBehavior && target.type === MODULE.BEHAVIOR_TYPE;
-        return { doc: valid ? target : null, changes: valid ? { [`flags.${MODULE.ID}.history`]: [], [`flags.${MODULE.ID}.triggerCount`]: 0 } : {} };
+        return { doc: valid ? target : null, changes: valid ? historyResetChanges() : {} };
       })
     );
   }
@@ -410,7 +410,7 @@ registerNodeType('preloadScene', {
   },
   async execute(node) {
     const scene = await fromUuid(node.sceneUuid);
-    if (scene instanceof Scene) await game.scenes.preload(scene.id);
+    if (scene instanceof Scene) await game.scenes.preload(scene.id, { broadcast: true });
   }
 });
 

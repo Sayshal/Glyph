@@ -172,6 +172,7 @@ export function registerPseudoEvents() {
   });
   Hooks.on('preUpdateWall', (wall, changes, options) => {
     if (changes.ds !== undefined) options._priorDs = wall.ds;
+    if (changes.door !== undefined) options._priorDoor = wall.door;
   });
   Hooks.on('updateWall', (wall, changed, options) => {
     const scene = wall.parent;
@@ -182,7 +183,8 @@ export function registerPseudoEvents() {
       const name = doorStateEventName(options._priorDs, wall.ds);
       if (name) dispatchPseudoEvent(regions, name, { wall });
     }
-    if (changed.door !== undefined && wall.door !== CONST.WALL_DOOR_TYPES.SECRET) dispatchPseudoEvent(regions, 'doorRevealed', { wall });
+    const { SECRET, DOOR } = CONST.WALL_DOOR_TYPES;
+    if (changed.door !== undefined && options._priorDoor === SECRET && wall.door === DOOR) dispatchPseudoEvent(regions, 'doorRevealed', { wall });
   });
 }
 

@@ -1,6 +1,9 @@
 /** @type {{kind: string, value: string}} A reference to the token that fired the event. */
 export const TOKEN = { kind: 'triggerToken', value: '' };
 
+/** @type {{kind: string, value: string}} A reference to the Region that fired the event. */
+export const REGION = { kind: 'context', value: 'region' };
+
 /** @type {{kind: string, value: string}} A reference to the actor of the token that fired the event. */
 export const ACTOR = { kind: 'triggerActor', value: '' };
 

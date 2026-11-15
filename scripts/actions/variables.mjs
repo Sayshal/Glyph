@@ -2,16 +2,16 @@ import { batchUpdate } from '../batch.mjs';
 import { MODULE } from '../constants.mjs';
 import { globToRegExp } from '../nodes/expression.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
-import { resolveCollection, resolveReference } from '../targeting.mjs';
+import { isBlankReference, resolveCollection, resolveReference } from '../targeting.mjs';
 import { toTriggerBehavior } from '../tile-link.mjs';
 
 /**
- * Whether a `setVariable` node removes its variables rather than assigning them. A blank string assigns `""`.
+ * Whether a `setVariable` node removes its variables rather than assigning them. A blank value clears.
  * @param {object} node The `setVariable` node.
  * @returns {boolean} True when the node clears.
  */
 function isClearing(node) {
-  return node.value === null || node.value === undefined;
+  return node.value === null || node.value === undefined || node.value === '';
 }
 
 /**
@@ -63,7 +63,7 @@ registerNodeType('setVariable', {
     if (typeof node.name !== 'string' || !node.name) throw new Error('setVariable.name must be a non-empty string.');
   },
   async execute(node, context) {
-    const isSelf = !node.target;
+    const isSelf = isBlankReference(node.target);
     const behavior = isSelf ? context.info.behavior : toTriggerBehavior(resolveReference(node.target, context));
     if (isSelf) applyContextVariable(node, context.variables);
     if (!behavior) return;
@@ -73,7 +73,7 @@ registerNodeType('setVariable', {
   async batchExecute(pairs) {
     const groups = new Map();
     for (const { node, context } of pairs) {
-      const isSelf = !node.target;
+      const isSelf = isBlankReference(node.target);
       const behavior = isSelf ? context.info.behavior : toTriggerBehavior(resolveReference(node.target, context));
       if (isSelf) applyContextVariable(node, context.variables);
       if (!behavior) continue;

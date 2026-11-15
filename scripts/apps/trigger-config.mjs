@@ -1,4 +1,5 @@
 import { MODULE } from '../constants.mjs';
+import { historyResetChanges } from '../gates.mjs';
 import { listResolvers } from '../targeting.mjs';
 import { applyTemplate, listTemplates, saveTemplate } from '../templates.mjs';
 import { Combobox } from './combobox.mjs';
@@ -293,7 +294,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       content: `<p>${game.i18n.localize('GLYPH.HISTORY.resetPrompt')}</p>`
     });
     if (!confirmed) return;
-    await this.document.update({ [`flags.${MODULE.ID}.history`]: [], [`flags.${MODULE.ID}.triggerCount`]: 0 });
+    await this.document.update(historyResetChanges());
     return this.render({ parts: ['history'] });
   }
 
@@ -358,7 +359,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
       return this.render({ parts: ['program'] });
     }
     if (target.matches('.glyph-ref-kind')) await this.#syncReferenceKind(target);
-    const { path, widget, numeric } = target.dataset;
+    const { path, widget, numeric, nullable } = target.dataset;
     if (!path) return;
     event.stopPropagation();
     let value;
@@ -372,7 +373,7 @@ export class TriggerBehaviorConfig extends HandlebarsApplicationMixin(DocumentSh
         /* keep the raw string when it isn't valid JSON */
       }
     } else if (numeric && Array.isArray(value)) value = value.map(Number);
-    else if (target.type === 'number') value = Number(value);
+    else if (target.type === 'number') value = nullable && value === '' ? null : Number(value);
     await this.#mutateHandler((tree) => {
       const parentPath = path.slice(0, path.lastIndexOf('.'));
       const parentWidget = PARENT_WIDGET_BY_LEAF.get(path.slice(parentPath.length + 1));

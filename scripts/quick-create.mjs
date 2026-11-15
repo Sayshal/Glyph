@@ -1,16 +1,16 @@
 import { MODULE, SETTINGS } from './constants.mjs';
-import { ACTOR, buildTriggerSystem, seq } from './data/trigger-system.mjs';
+import { ACTOR, buildTriggerSystem } from './data/trigger-system.mjs';
 import { regionShapeFromTile } from './tile-link.mjs';
 
 /**
  * Create a Region + `glyph.trigger` behavior linked to an existing Tile.
  * @param {Scene} scene The scene to create on.
  * @param {TileDocument} tile The Tile to link.
- * @param {{pseudoEvents?: string[], events?: string[], pertoken?: boolean, handlers: Record<string, object>}} trigger The trigger config.
+ * @param {{pseudoEvents?: string[], events?: string[], handlers: Record<string, object>}} trigger The trigger config.
  * @returns {Promise<void>}
  */
 async function createLinkedTrigger(scene, tile, trigger) {
-  const system = { ...buildTriggerSystem(trigger), pertoken: !!trigger.pertoken, linkedTile: { kind: 'uuid', value: tile.uuid } };
+  const system = { ...buildTriggerSystem(trigger), linkedTile: { kind: 'uuid', value: tile.uuid } };
   await scene.createEmbeddedDocuments('Region', [{ name: trigger.name, shapes: [regionShapeFromTile(tile)], behaviors: [{ type: MODULE.BEHAVIOR_TYPE, system }] }]);
 }
 
@@ -27,13 +27,18 @@ async function dropItem(data) {
   await createLinkedTrigger(canvas.scene, tile, {
     name: item.name,
     pseudoEvents: ['click'],
-    pertoken: true,
     handlers: {
-      click: seq(
-        { type: 'toggleTileVisibility', tile: { kind: 'uuid', value: tile.uuid }, mode: 'hide' },
-        { type: 'addItem', actor: ACTOR, itemUuid: item.uuid },
-        { type: 'notification', text: _loc('GLYPH.QUICKCREATE.NOTIFICATIONS.Added', { name: item.name }), level: 'info', audience: 'triggeringUser' }
-      )
+      click: {
+        type: 'if',
+        condition: 'hasActor({{token}})',
+        then: [
+          { type: 'toggleTriggerBehavior', behavior: { kind: 'context', value: 'behavior' }, mode: 'disable' },
+          { type: 'toggleTileVisibility', tile: { kind: 'uuid', value: tile.uuid }, mode: 'hide' },
+          { type: 'addItem', actor: ACTOR, itemUuid: item.uuid },
+          { type: 'notification', text: _loc('GLYPH.QUICKCREATE.NOTIFICATIONS.Added', { name: item.name }), level: 'info', audience: 'triggeringUser' }
+        ],
+        else: []
+      }
     }
   });
 }

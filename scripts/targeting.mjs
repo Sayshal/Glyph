@@ -20,7 +20,7 @@ export function registerResolver(id, descriptor) {
  * @returns {{id: string, label: string}[]}
  */
 export function listResolvers() {
-  return [...resolvers.entries()].map(([id, { label }]) => ({ id, label }));
+  return [...resolvers.entries()].map(([id, { label }]) => ({ id, label: _loc(label) }));
 }
 
 /**
@@ -47,6 +47,15 @@ export function resolveCollection(id, context) {
  */
 function resolveTaggedCollection(tag) {
   return isModuleActive('tagger') ? Tagger.getByTag(tag, TAG_OPTIONS) : [];
+}
+
+/**
+ * Whether a reference names nothing.
+ * @param {{kind: string, value: string}|undefined} ref The stored reference.
+ * @returns {boolean}
+ */
+export function isBlankReference(ref) {
+  return !ref || (ref.kind === 'uuid' && !ref.value);
 }
 
 /**
@@ -78,8 +87,10 @@ export function resolveReference(ref, context) {
 function pointOf(resolved) {
   if (!resolved) return null;
   const center = (resolved.object ?? resolved).center;
-  if (center && typeof center.x === 'number') return { x: center.x, y: center.y };
-  return typeof resolved.x === 'number' && typeof resolved.y === 'number' ? { x: resolved.x, y: resolved.y } : null;
+  const point = center && typeof center.x === 'number' ? { x: center.x, y: center.y } : typeof resolved.x === 'number' && typeof resolved.y === 'number' ? { x: resolved.x, y: resolved.y } : null;
+  const document = resolved.document ?? resolved;
+  const level = document.level ?? (document.levels?.size === 1 ? [...document.levels][0] : undefined);
+  return point && level ? { ...point, level } : point;
 }
 
 /**
@@ -114,40 +125,40 @@ export function resolveActorReference(ref, context) {
   return toActor(resolveReference(ref, context));
 }
 
-registerResolver('region', { label: 'This Region', producedType: 'Region', resolve: (context) => [context.info.region] });
-registerResolver('scene', { label: 'This Scene', producedType: 'Scene', resolve: (context) => [context.info.scene] });
-registerResolver('activeScene', { label: 'The Active Scene', producedType: 'Scene', resolve: () => (game.scenes.active ? [game.scenes.active] : []) });
-registerResolver('within', { label: 'Tokens Within This Region', producedType: 'Token', resolve: (context) => [...context.info.region.tokens] });
+registerResolver('region', { label: 'GLYPH.COLLECTIONS.region', producedType: 'Region', resolve: (context) => [context.info.region] });
+registerResolver('scene', { label: 'GLYPH.COLLECTIONS.scene', producedType: 'Scene', resolve: (context) => [context.info.scene] });
+registerResolver('activeScene', { label: 'GLYPH.COLLECTIONS.activeScene', producedType: 'Scene', resolve: () => (game.scenes.active ? [game.scenes.active] : []) });
+registerResolver('within', { label: 'GLYPH.COLLECTIONS.within', producedType: 'Token', resolve: (context) => [...context.info.region.tokens] });
 registerResolver('players', {
-  label: 'Player-Owned Tokens',
+  label: 'GLYPH.COLLECTIONS.players',
   producedType: 'Token',
   resolve: (context) => context.info.scene.tokens.filter((t) => game.users.some((u) => !u.isGM && t.actor?.testUserPermission(u, 'OWNER')))
 });
-registerResolver('users', { label: 'Users', producedType: 'User', resolve: () => [...game.users] });
-registerResolver('users:active', { label: 'Active Users', producedType: 'User', resolve: () => game.users.filter((u) => u.active) });
+registerResolver('users', { label: 'GLYPH.COLLECTIONS.users', producedType: 'User', resolve: () => [...game.users] });
+registerResolver('users:active', { label: 'GLYPH.COLLECTIONS.usersActive', producedType: 'User', resolve: () => game.users.filter((u) => u.active) });
 registerResolver('players:active', {
-  label: 'Tokens Owned By An Active Player',
+  label: 'GLYPH.COLLECTIONS.playersActive',
   producedType: 'Token',
   resolve: (context) => context.info.scene.tokens.filter((t) => game.users.some((u) => !u.isGM && u.active && t.actor?.testUserPermission(u, 'OWNER')))
 });
-registerResolver('controlled', { label: 'Controlled Tokens', producedType: 'Token', resolve: () => canvas.tokens?.controlled.map((t) => t.document) ?? [] });
-registerResolver('notes', { label: 'Notes On This Scene', producedType: 'Note', resolve: (context) => [...context.info.scene.notes] });
-registerResolver('regions', { label: 'Regions On This Scene', producedType: 'Region', resolve: (context) => [...context.info.scene.regions] });
-registerResolver('sounds', { label: 'Ambient Sounds On This Scene', producedType: 'AmbientSound', resolve: (context) => [...context.info.scene.sounds] });
-registerResolver('drawings', { label: 'Drawings On This Scene', producedType: 'Drawing', resolve: (context) => [...context.info.scene.drawings] });
-registerResolver('tiles', { label: 'Tiles On This Scene', producedType: 'Tile', resolve: (context) => [...context.info.scene.tiles] });
-registerResolver('walls', { label: 'Walls On This Scene', producedType: 'Wall', resolve: (context) => [...context.info.scene.walls] });
-registerResolver('actors', { label: 'Actors', producedType: 'Actor', resolve: () => [...game.actors] });
-registerResolver('items', { label: 'Items', producedType: 'Item', resolve: () => [...game.items] });
-registerResolver('journal', { label: 'Journal Entries', producedType: 'JournalEntry', resolve: () => [...game.journal] });
-registerResolver('macros', { label: 'Macros', producedType: 'Macro', resolve: () => [...game.macros] });
+registerResolver('controlled', { label: 'GLYPH.COLLECTIONS.controlled', producedType: 'Token', resolve: () => canvas.tokens?.controlled.map((t) => t.document) ?? [] });
+registerResolver('notes', { label: 'GLYPH.COLLECTIONS.notes', producedType: 'Note', resolve: (context) => [...context.info.scene.notes] });
+registerResolver('regions', { label: 'GLYPH.COLLECTIONS.regions', producedType: 'Region', resolve: (context) => [...context.info.scene.regions] });
+registerResolver('sounds', { label: 'GLYPH.COLLECTIONS.sounds', producedType: 'AmbientSound', resolve: (context) => [...context.info.scene.sounds] });
+registerResolver('drawings', { label: 'GLYPH.COLLECTIONS.drawings', producedType: 'Drawing', resolve: (context) => [...context.info.scene.drawings] });
+registerResolver('tiles', { label: 'GLYPH.COLLECTIONS.tiles', producedType: 'Tile', resolve: (context) => [...context.info.scene.tiles] });
+registerResolver('walls', { label: 'GLYPH.COLLECTIONS.walls', producedType: 'Wall', resolve: (context) => [...context.info.scene.walls] });
+registerResolver('actors', { label: 'GLYPH.COLLECTIONS.actors', producedType: 'Actor', resolve: () => [...game.actors] });
+registerResolver('items', { label: 'GLYPH.COLLECTIONS.items', producedType: 'Item', resolve: () => [...game.items] });
+registerResolver('journal', { label: 'GLYPH.COLLECTIONS.journal', producedType: 'JournalEntry', resolve: () => [...game.journal] });
+registerResolver('macros', { label: 'GLYPH.COLLECTIONS.macros', producedType: 'Macro', resolve: () => [...game.macros] });
 registerResolver('previous', {
-  label: 'Result Of The Previous Action',
+  label: 'GLYPH.COLLECTIONS.previous',
   producedType: 'Document',
   resolve: (context) => (Array.isArray(context.previous) ? context.previous : context.previous == null ? [] : [context.previous])
 });
 registerResolver('playing', {
-  label: 'Currently Playing Sounds',
+  label: 'GLYPH.COLLECTIONS.playing',
   producedType: 'PlaylistSound',
   resolve: () => game.playlists.contents.flatMap((p) => p.sounds.filter((s) => s.playing || s.pausedTime != null))
 });

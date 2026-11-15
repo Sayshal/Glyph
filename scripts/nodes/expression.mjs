@@ -72,7 +72,7 @@ function movementChangedElevation(context) {
  * @param {Point} b The destination point.
  * @returns {boolean}
  */
-function canSee(a, b) {
+export function canSee(a, b) {
   if (!a || !b) return false;
   return !CONFIG.Canvas.polygonBackends.sight.testCollision(a, b, { type: 'sight', mode: 'any' });
 }
@@ -271,7 +271,19 @@ function directionOfRun(context, axis) {
   const x = Math.abs(angle) === Math.PI / 2 ? '' : Math.abs(angle) < Math.PI / 2 ? 'right' : 'left';
   if (axis === 'y') return y;
   if (axis === 'x') return x;
-  return `${y}-${x}`;
+  return y && x ? `${y}-${x}` : y || x;
+}
+
+/**
+ * An actor's Peddler goodwill at one shop.
+ * @param {Actor|null} actor The customer.
+ * @param {Actor|null} shop The shop actor.
+ * @returns {number} The goodwill, or 0.
+ */
+function peddlerGoodwill(actor, shop) {
+  const goodwill = Peddler.getShopConfig(shop)?.goodwill;
+  if (!actor || !goodwill) return 0;
+  return (Number(goodwill.perActor?.[actor.id]) || 0) + (Number(goodwill.factionBase?.[actor.id]) || 0);
 }
 
 /** @type {Record<string, (args: unknown[], context: object) => unknown>} Functions callable from an expression. */
@@ -329,7 +341,7 @@ const FUNCTIONS = {
   lightLevel: ([ref]) => (isModuleActive('tokenlightcondition') ? TLC.api.getLightLevel(ref?.object ?? ref) : null),
   effectiveLightLevel: ([ref]) => (isModuleActive('tokenlightcondition') ? TLC.api.getEffectiveLightLevel(ref?.object ?? ref) : null),
   activeMood: () => (isModuleActive('minstrel') ? (MINSTREL.runtime.moodDef(MINSTREL.runtime.active().at(-1)?.moodId)?.name ?? null) : null),
-  peddlerTrust: ([ref]) => (isModuleActive('peddler') ? (Peddler.getTrust(toActor(ref))?.value ?? 0) : 0),
+  peddlerTrust: ([ref, shop]) => (isModuleActive('peddler') ? peddlerGoodwill(toActor(ref), toActor(shop)) : 0),
   pendingApprovals: () => (isModuleActive('hero-mancer') ? HEROMANCER.api.getPendingSubmissions().length : 0)
 };
 

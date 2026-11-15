@@ -695,7 +695,8 @@
       background: var(--atlas-error-bg);
     }
 
-    &.glyph-import-partial {
+    &.glyph-import-partial,
+    &.glyph-import-skipped {
       color: var(--atlas-warning);
       background: color-mix(in srgb, var(--atlas-warning) 16%, transparent);
     }

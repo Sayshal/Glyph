@@ -49,8 +49,8 @@ export class MattImportDialog extends HandlebarsApplicationMixin(ApplicationV2) 
         if (entry.level !== 'ok') issues.push({ level: entry.level, note: entry.note, matt: JSON.stringify(entry.matt) });
       }
       const tier = counts.manual > 0 ? 0 : counts.partial > 0 || counts.skipped > 0 ? 1 : 2;
-      const badge = _loc(`GLYPH.IMPORT.LEVELS.${counts.manual > 0 ? 'manual' : 'partial'}`);
-      return { name: tile.name || tile.id, counts, issues, linked: !!converted.linkedTile, tier, badge };
+      const level = counts.manual > 0 ? 'manual' : counts.partial > 0 ? 'partial' : 'skipped';
+      return { name: tile.name || tile.id, counts, issues, linked: !!converted.linkedTile, tier, level, badge: _loc(`GLYPH.IMPORT.LEVELS.${level}`) };
     });
     rows.sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
     const totals = rows.reduce(

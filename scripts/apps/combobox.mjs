@@ -296,16 +296,20 @@ export class Combobox {
     this.#setActive(null);
   }
 
-  /** Anchor the panel under the trigger using fixed coordinates so the popover escapes ancestor clipping. */
+  /** Anchor the panel to the trigger with fixed coordinates, below or above, within the host window. */
   #positionPanel() {
     const rect = this.trigger.getBoundingClientRect();
     const gap = 2;
+    const bounds = this.root.closest('.window-app, .application')?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
+    const below = bounds.bottom - rect.bottom - gap;
+    const above = rect.top - bounds.top - gap;
+    const flip = above > below;
     this.panel.style.position = 'fixed';
-    this.panel.style.top = `${rect.bottom + gap}px`;
+    this.panel.style.top = flip ? 'auto' : `${rect.bottom + gap}px`;
+    this.panel.style.bottom = flip ? `${window.innerHeight - rect.top + gap}px` : 'auto';
     this.panel.style.left = `${rect.left}px`;
     this.panel.style.width = `${rect.width}px`;
-    const host = this.root.closest('.window-app, .application');
-    if (host) this.panel.style.maxHeight = `${host.getBoundingClientRect().height * 0.8}px`;
+    this.panel.style.maxHeight = `${flip ? above : below}px`;
     this.#fitTags();
   }
 

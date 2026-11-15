@@ -57,9 +57,9 @@ function registerFxmasterActions() {
     validate(node) {
       if (typeof node.effect !== 'string' || !node.effect) throw new Error('weatherEffect.effect must be a non-empty string.');
     },
-    async execute(node) {
+    async execute(node, context) {
       const options = Object.fromEntries(Object.entries(node.options ?? {}).map(([key, value]) => [key, { value }]));
-      await game.modules.get('fxmaster').api?.effects.play({ particles: [{ type: node.effect, options }] });
+      await game.modules.get('fxmaster').api?.effects.play({ particles: [{ type: node.effect, options }], scene: context.info.scene });
     }
   });
 

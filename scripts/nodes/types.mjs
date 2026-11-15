@@ -1,6 +1,6 @@
 import { MODULE } from '../constants.mjs';
 import { activeRuns } from '../run-context.mjs';
-import { resolveCollection, resolveReference } from '../targeting.mjs';
+import { isBlankReference, resolveCollection, resolveReference } from '../targeting.mjs';
 import { runNode } from './executor.mjs';
 import { evaluateCondition } from './expression.mjs';
 import { getNodeType, registerNodeType } from './registry.mjs';
@@ -168,7 +168,7 @@ registerNodeType('forEach', {
     if (node.pick && node.pick !== 'all') items = pickOne(items, node.pick, node.pickPath, node.pickIndex);
     else if (node.limit > 0) items = items.slice(0, node.limit);
     const sliced = items.slice(0, MAX_ITERATIONS);
-    const bodyType = node.body.length === 1 ? getNodeType(node.body[0].type) : null;
+    const bodyType = node.body.length === 1 && node.body[0].enabled !== false ? getNodeType(node.body[0].type) : null;
     if (bodyType?.batchExecute && sliced.length && !context.control.stopped && !context.control.goto) {
       await bodyType.batchExecute(sliced.map((item) => ({ node: node.body[0], context: { ...context, item } })));
     } else {
@@ -302,7 +302,7 @@ registerNodeType('stopActions', {
   hint: 'GLYPH.NODES.stopActions.hint',
   fields: [{ name: 'behavior', widget: 'reference', label: 'GLYPH.NODES.stopActions.FIELDS.behavior.label', hint: 'GLYPH.NODES.stopActions.FIELDS.behavior.hint' }],
   async execute(node, context) {
-    if (!('behavior' in node)) {
+    if (isBlankReference(node.behavior)) {
       context.control.stopped = true;
       return;
     }

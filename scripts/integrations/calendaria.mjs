@@ -17,6 +17,7 @@ export function registerCalendariaIntegration() {
   for (const [hookName, pseudoEvent] of Object.entries(HOOK_MAP)) {
     Hooks.on(hookName, (data) => {
       if (!ATLAS.isPrimaryGM) return;
+      if (pseudoEvent === 'restDayChange' && !data?.isRestDay) return;
       for (const scene of game.scenes) dispatchPseudoEvent(scene.regions, pseudoEvent, data);
     });
   }

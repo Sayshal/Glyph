@@ -7,6 +7,7 @@ registerNodeType('hurtHeal', {
   category: 'token',
   label: 'GLYPH.ACTIONS.hurtHeal.label',
   hint: 'GLYPH.ACTIONS.hurtHeal.hint',
+  available: () => !!getHurtHealAdapter(),
   fields: [
     { name: 'actor', widget: 'reference', documentType: 'Actor', label: 'GLYPH.ACTIONS.hurtHeal.FIELDS.actor.label', required: true },
     { name: 'value', widget: 'formula', label: 'GLYPH.ACTIONS.hurtHeal.FIELDS.value.label', hint: 'GLYPH.ACTIONS.hurtHeal.FIELDS.value.hint', required: true },

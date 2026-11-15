@@ -68,7 +68,7 @@ function referenceParts(ref, path) {
  * @returns {object} The widget view model.
  */
 function buildWidget(field, value, path, ui, node) {
-  const base = { path, fieldName: field.name, widgetName: field.widget, numeric: !!field.numeric };
+  const base = { path, fieldName: field.name, widgetName: field.widget, numeric: !!field.numeric, nullable: !!field.nullable };
   switch (field.widget) {
     case 'textarea':
       return { ...base, kind: 'textarea', value: value ?? '' };
@@ -76,7 +76,7 @@ function buildWidget(field, value, path, ui, node) {
       return {
         ...base,
         kind: 'number',
-        value: value ?? 0,
+        value: value ?? (field.nullable ? '' : 0),
         hasMin: field.min !== undefined,
         min: field.min,
         hasMax: field.max !== undefined,

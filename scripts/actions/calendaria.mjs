@@ -30,11 +30,11 @@ export function registerCalendariaActions() {
     label: 'GLYPH.ACTIONS.setDateTime.label',
     hint: 'GLYPH.ACTIONS.setDateTime.hint',
     fields: [
-      { name: 'year', widget: 'number', label: 'GLYPH.ACTIONS.setDateTime.FIELDS.year.label', hint: KEEP_CURRENT_HINT },
-      { name: 'month', widget: 'number', min: 1, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.month.label', hint: KEEP_CURRENT_HINT },
-      { name: 'day', widget: 'number', min: 1, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.day.label', hint: KEEP_CURRENT_HINT },
-      { name: 'hour', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.hour.label', hint: KEEP_CURRENT_HINT },
-      { name: 'minute', widget: 'number', min: 0, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.minute.label', hint: KEEP_CURRENT_HINT },
+      { name: 'year', widget: 'number', nullable: true, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.year.label', hint: KEEP_CURRENT_HINT },
+      { name: 'month', widget: 'number', nullable: true, min: 1, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.month.label', hint: KEEP_CURRENT_HINT },
+      { name: 'day', widget: 'number', nullable: true, min: 1, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.day.label', hint: KEEP_CURRENT_HINT },
+      { name: 'hour', widget: 'number', nullable: true, min: 0, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.hour.label', hint: KEEP_CURRENT_HINT },
+      { name: 'minute', widget: 'number', nullable: true, min: 0, label: 'GLYPH.ACTIONS.setDateTime.FIELDS.minute.label', hint: KEEP_CURRENT_HINT },
       { name: 'cinematic', widget: 'boolean', label: 'GLYPH.ACTIONS.setDateTime.FIELDS.cinematic.label' }
     ],
     validate(node) {

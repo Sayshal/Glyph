@@ -1,8 +1,15 @@
 import { MODULE } from '../constants.mjs';
-import { ACTOR, TOKEN, buildTriggerSystem, seq } from './trigger-system.mjs';
+import { ACTOR, REGION, TOKEN, buildTriggerSystem, seq } from './trigger-system.mjs';
 
 const TILE_REF = { kind: 'uuid', value: 'Scene.PLACEHOLDER.Tile.PLACEHOLDER' };
 const ITEM_ACTOR = { kind: 'context', value: 'item.actor' };
+
+/**
+ * A reference to another behavior of the same recipe, by index.
+ * @param {number} index The behavior's index in the recipe.
+ * @returns {{kind: string, value: string}}
+ */
+const SIBLING_BEHAVIOR = (index) => ({ kind: 'uuid', value: `SIBLING.${index}` });
 
 /**
  * Shipped recipes: named patterns that create every RegionBehavior they need on a Region in one step.
@@ -21,7 +28,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
-            tokenEnter: { type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }
+            tokenEnter: { type: 'pingLocation', location: REGION, style: 'chevron' }
           }
         })
       }
@@ -58,7 +65,19 @@ export const RECIPES = [
     name: 'GLYPH.RECIPES.motionLight.name',
     hint: 'GLYPH.RECIPES.motionLight.hint',
     category: 'lighting',
-    behaviors: [{ type: 'adjustDarknessLevel', system: { mode: 1, modifier: 0.5 } }]
+    behaviors: [
+      { type: 'adjustDarknessLevel', disabled: true, system: { mode: 1, modifier: 0.5 } },
+      {
+        type: MODULE.BEHAVIOR_TYPE,
+        system: buildTriggerSystem({
+          events: ['tokenEnter', 'tokenExit'],
+          handlers: {
+            tokenEnter: { type: 'alter', target: SIBLING_BEHAVIOR(0), path: 'disabled', value: false, mode: 'set' },
+            tokenExit: { type: 'alter', target: SIBLING_BEHAVIOR(0), path: 'disabled', value: true, mode: 'set' }
+          }
+        })
+      }
+    ]
   },
 
   {
@@ -126,7 +145,7 @@ export const RECIPES = [
         system: buildTriggerSystem({
           events: ['tokenEnter'],
           handlers: {
-            tokenEnter: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'alert' }, { type: 'notification', text: 'An alarm sounds!', level: 'warn', audience: 'everyone' })
+            tokenEnter: seq({ type: 'pingLocation', location: REGION, style: 'alert' }, { type: 'notification', text: 'An alarm sounds!', level: 'warn', audience: 'everyone' })
           }
         })
       }
@@ -272,7 +291,7 @@ export const RECIPES = [
         type: MODULE.BEHAVIOR_TYPE,
         system: buildTriggerSystem({
           events: ['tokenEnter'],
-          handlers: { tokenEnter: seq({ type: 'toggleTileVisibility', tile: TILE_REF, mode: 'show' }, { type: 'resetFog' }, { type: 'pingLocation', location: { x: 0, y: 0 }, style: 'alert' }) }
+          handlers: { tokenEnter: seq({ type: 'toggleTileVisibility', tile: TILE_REF, mode: 'show' }, { type: 'resetFog' }, { type: 'pingLocation', location: TILE_REF, style: 'alert' }) }
         })
       }
     ]
@@ -330,8 +349,8 @@ export const RECIPES = [
               ],
               audience: 'triggeringUser'
             },
-            goLeft: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }, { type: 'chatMessage', text: '{{token.name}} heads left.' }),
-            goRight: seq({ type: 'pingLocation', location: { x: 0, y: 0 }, style: 'chevron' }, { type: 'chatMessage', text: '{{token.name}} heads right.' })
+            goLeft: seq({ type: 'pingLocation', location: REGION, style: 'chevron' }, { type: 'chatMessage', text: '{{token.name}} heads left.' }),
+            goRight: seq({ type: 'pingLocation', location: REGION, style: 'chevron' }, { type: 'chatMessage', text: '{{token.name}} heads right.' })
           }
         })
       }
@@ -347,9 +366,8 @@ export const RECIPES = [
       {
         type: MODULE.BEHAVIOR_TYPE,
         system: buildTriggerSystem({
-          events: ['tokenEnter', 'tokenTurnStart'],
+          events: ['tokenTurnStart'],
           handlers: {
-            tokenEnter: { type: 'setVariable', name: 'musicStarted', value: false },
             tokenTurnStart: {
               type: 'if',
               condition: '{{variables.musicStarted}} == true',

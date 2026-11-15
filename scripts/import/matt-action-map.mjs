@@ -212,6 +212,12 @@ export const ACTION_MAP = {
         suppressTriggers: data.triggerremote !== true
       };
       return entity.single ? teleportNode : { type: 'forEach', collection: entity.collection, body: [teleportNode] };
+    },
+    partial: (data) => {
+      if (idOf(data.location)?.startsWith('tagger') || pointFromLocation(data.location)) return null;
+      const target = fromUuidSync(requireUuid(data.location), { strict: false });
+      if (['Tile', 'Scene'].includes(target?.documentName)) return null;
+      return 'The teleport location is not a Tile or Scene, or no longer exists, so the Teleport action has no destination. Set one by hand.';
     }
   },
   movetoken: {

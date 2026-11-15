@@ -32,9 +32,11 @@ export class ProgramField extends foundry.data.fields.ObjectField {
   /** @inheritDoc */
   _validateType(value, options = {}) {
     super._validateType(value, options);
+    const current = options.partial && options.model ? foundry.utils.getProperty(options.model._source, this.fieldPath) : null;
+    const handlers = current ? foundry.utils.mergeObject(current, value, { inplace: false }) : value;
     const landings = new Set();
-    for (const node of Object.values(value)) collectTags(node, 'landing', landings);
-    for (const [name, node] of Object.entries(value)) {
+    for (const node of Object.values(handlers)) collectTags(node, 'landing', landings);
+    for (const [name, node] of Object.entries(handlers)) {
       try {
         validateNode(node);
       } catch (err) {

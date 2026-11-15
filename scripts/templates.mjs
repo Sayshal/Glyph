@@ -9,13 +9,16 @@ const PACK_NAME = 'glyph-trigger-templates';
 const EXAMPLE_PREFIX = 'example:';
 
 /**
- * Whether every action node reachable under `node` is currently a registered node type.
+ * Whether every action node reachable under `node` is a registered node type usable on this system.
  * @param {object} node A program node.
  * @returns {boolean}
  */
 export function allNodeTypesRegistered(node) {
   if (!node || typeof node !== 'object') return true;
-  if (typeof node.type === 'string' && !getNodeType(node.type)) return false;
+  if (typeof node.type === 'string') {
+    const definition = getNodeType(node.type);
+    if (!definition || definition.available?.() === false) return false;
+  }
   return Object.values(node).every((value) => {
     if (Array.isArray(value)) return value.every(allNodeTypesRegistered);
     if (value && typeof value === 'object') return allNodeTypesRegistered(value);

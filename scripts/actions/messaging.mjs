@@ -306,8 +306,9 @@ function dialogFormData(dialog) {
   return form ? new foundry.applications.ux.FormDataExtended(form).object : {};
 }
 
-registerRenderIntent('showDialog', ({ title, content, buttons, closeHandler, width, height, behaviorUuid }) => {
+registerRenderIntent('showDialog', ({ title, content, buttons, closeHandler, width, height, behaviorUuid, tokenUuid }) => {
   openDialogs.get(behaviorUuid)?.close();
+  const token = tokenUuid ? fromUuidSync(tokenUuid) : null;
   let submitted = false;
   const body = document.createElement('div');
   body.innerHTML = content?.includes('<') ? content : `<p>${content ?? ''}</p>`;
@@ -320,7 +321,7 @@ registerRenderIntent('showDialog', ({ title, content, buttons, closeHandler, wid
         ? buttons.map((button, i) => ({
             action: `button${i}`,
             label: button.label,
-            callback: (_event, _target, dlg) => (button.handler ? runTrigger(behaviorUuid, button.handler, dialogFormData(dlg)) : undefined)
+            callback: (_event, _target, dlg) => (button.handler ? runTrigger(behaviorUuid, button.handler, { ...dialogFormData(dlg), token }) : undefined)
           }))
         : [{ action: NO_BUTTON, label: '', style: { display: 'none' } }]
       : [{ action: 'button0', label: _loc('COMMON.Confirm') }],
@@ -328,13 +329,13 @@ registerRenderIntent('showDialog', ({ title, content, buttons, closeHandler, wid
       submitted = true;
       if (result !== undefined && result !== NO_BUTTON) return;
       const data = dialogFormData(dlg);
-      if (data.goto) runTrigger(behaviorUuid, String(data.goto), data);
+      if (data.goto) runTrigger(behaviorUuid, String(data.goto), { ...data, token });
     }
   });
   dialog.addEventListener(
     'close',
     () => {
-      if (!submitted && closeHandler) runTrigger(behaviorUuid, closeHandler);
+      if (!submitted && closeHandler) runTrigger(behaviorUuid, closeHandler, { token });
     },
     { once: true }
   );
@@ -375,7 +376,8 @@ registerNodeType('showDialog', {
       closeHandler: node.closeHandler || undefined,
       width: node.width || undefined,
       height: node.height || undefined,
-      behaviorUuid: context.info.behavior.uuid
+      behaviorUuid: context.info.behavior.uuid,
+      tokenUuid: context.info.event.data?.token?.uuid ?? null
     });
   }
 });
@@ -432,6 +434,8 @@ async function journalPage(node, context) {
   if (!entry) return null;
   if (!node.createPage) return entry.pages.contents[0] ?? null;
   const name = interpolate(node.pageName, context) || entry.name;
+  const existing = entry.pages.getName(name);
+  if (existing) return existing;
   const [created] = await JournalEntryPage.createDocuments([{ type: 'text', name }], { parent: entry });
   return created ?? null;
 }
@@ -444,7 +448,7 @@ async function journalPage(node, context) {
  */
 function journalText(node, context) {
   const text = polyglotText(interpolate(node.text, context), node.language);
-  return node.line ? `${text}</br>` : text;
+  return node.line ? `${text}<br>` : text;
 }
 
 /**

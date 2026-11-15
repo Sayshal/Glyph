@@ -3,7 +3,7 @@
     {{#if row.issues.length}}
       <details class="glyph-import-tile" open>
         <summary>
-          <span class="glyph-import-tile-badge glyph-import-{{#if row.counts.manual}}manual{{else}}partial{{/if}}">{{row.badge}}</span>
+          <span class="glyph-import-tile-badge glyph-import-{{row.level}}">{{row.badge}}</span>
           <span class="glyph-import-tile-name">{{row.name}}</span>
           {{#unless row.linked}}<span class="hint">{{localize "GLYPH.IMPORT.markerOnly"}}</span>{{/unless}}
         </summary>

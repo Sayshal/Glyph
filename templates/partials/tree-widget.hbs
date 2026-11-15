@@ -3,7 +3,7 @@
     <textarea data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" rows="3">{{value}}</textarea>
   {{else if (eq kind "number")}}
     <input type="number" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" {{#if numeric}}
-      data-numeric="true" {{/if}} value="{{value}}" {{#if hasMin}} min="{{min}}" {{/if}}{{#if hasMax}} max="{{max}}"
+      data-numeric="true" {{/if}}{{#if nullable}} data-nullable="true" {{/if}} value="{{value}}" {{#if hasMin}} min="{{min}}" {{/if}}{{#if hasMax}} max="{{max}}"
       {{/if}}{{#if hasStep}} step="{{step}}" {{/if}}>
   {{else if (eq kind "formula")}}
     <input type="text" data-path="{{path}}" data-field="{{fieldName}}" data-widget="{{widgetName}}" value="{{value}}"

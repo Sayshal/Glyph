@@ -1,4 +1,13 @@
 import { MODULE } from './constants.mjs';
+import { canSee } from './nodes/expression.mjs';
+
+/**
+ * The flag changes that clear a trigger's fire log, attempt count, and Go To counters.
+ * @returns {object} Update changes for the behavior.
+ */
+export function historyResetChanges() {
+  return { [`flags.${MODULE.ID}.history`]: [], [`flags.${MODULE.ID}.triggerCount`]: 0, [`flags.${MODULE.ID}.gotoCount`]: _del };
+}
 
 /**
  * Whether a trigger event should proceed, applying every per-behavior config gate.
@@ -10,8 +19,8 @@ export async function checkGates(behavior, event) {
   const system = behavior.system;
   if (!userRestrictionAllows(system.userRestriction, event.user)) return false;
   if (!tokenRestrictionAllows(system.tokenRestriction, event.data?.token)) return false;
-  if (system.vision && !hasVision(event)) return false;
   if (!ATLAS.isPrimaryGM) return false;
+  if (system.vision && !hasVision(event)) return false;
   if (game.paused && !system.allowPaused) return false;
   const count = (behavior.getFlag(MODULE.ID, 'triggerCount') ?? 0) + 1;
   if (!passesAttemptGates(behavior, event, system, count)) {
@@ -64,14 +73,16 @@ function tokenRestrictionAllows(restriction, token) {
 }
 
 /**
- * Whether the event's token (if any) is currently visible to the executing client.
+ * Whether another player-owned token with sight has line of sight to the event's token, if any.
  * @param {object} event The event being considered.
  * @returns {boolean}
  */
 function hasVision(event) {
-  const token = event.data?.token?.object;
-  if (!token || !canvas.ready) return true;
-  return canvas.visibility.testVisibility(token.center, { object: token });
+  const token = event.data?.token;
+  if (!token?.object) return true;
+  return token.parent.tokens.some(
+    (observer) => observer !== token && observer.object && observer.sight.enabled && observer.actor?.hasPlayerOwner && canSee(observer.object.center, token.object.center)
+  );
 }
 
 /**

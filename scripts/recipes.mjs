@@ -42,8 +42,12 @@ export async function applyRecipe(region, recipeId) {
   const recipe = RECIPES.find((r) => r.id === recipeId);
   if (!recipe) return [];
   const name = _loc(recipe.name);
-  const behaviors = withPsfxSound(recipe.behaviors, recipeId).map((behavior) => ({ ...behavior, name }));
-  return region.createEmbeddedDocuments('RegionBehavior', behaviors);
+  const ids = recipe.behaviors.map(() => foundry.utils.randomID());
+  const behaviors = withPsfxSound(recipe.behaviors, recipeId).map((behavior, i) => {
+    const linked = JSON.parse(JSON.stringify(behavior).replace(/SIBLING\.(\d+)/g, (_match, index) => `${region.uuid}.RegionBehavior.${ids[index]}`));
+    return { ...linked, _id: ids[i], name };
+  });
+  return region.createEmbeddedDocuments('RegionBehavior', behaviors, { keepId: true });
 }
 
 /** Add a "Recipes" button to core's Region config sheet, beside its own "Add Behavior" button. */

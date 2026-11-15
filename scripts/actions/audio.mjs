@@ -1,9 +1,9 @@
 import { sendToAudience } from '../audience.mjs';
-import { batchDelete, batchUpdate } from '../batch.mjs';
+import { batchUpdate } from '../batch.mjs';
 import { MODULE } from '../constants.mjs';
 import { registerNodeType } from '../nodes/registry.mjs';
 import { registerRenderIntent } from '../queries.mjs';
-import { resolveReference } from '../targeting.mjs';
+import { isBlankReference, resolveReference } from '../targeting.mjs';
 import { expandWildcardPaths } from '../wildcard.mjs';
 import { AUDIENCE_FIELD } from './messaging.mjs';
 
@@ -35,6 +35,35 @@ async function resolveSoundPath(path) {
   const files = await expandWildcardPaths([path]);
   if (!files.length) throw new Error(`playSound: no files match "${path}".`);
   return files[Math.floor(Math.random() * files.length)];
+}
+
+/**
+ * Clear a sound's activeSounds entry when it ends, optionally waiting it out.
+ * @param {string} src The resolved file.
+ * @param {RegionBehavior|undefined} behavior The behavior tracking the sound.
+ * @param {string|null} entryId The tracked entry to clear.
+ * @param {boolean} waitForCompletion Whether to wait out the sound's duration.
+ * @returns {Promise<void>}
+ */
+async function settleSound(src, behavior, entryId, waitForCompletion) {
+  const settle = async () => {
+    const sound = await foundry.audio.AudioHelper.preloadSound(src).catch(() => null);
+    if (!sound || sound.failed) throw new Error(`playSound: "${src}" failed to load.`);
+    if (!sound.duration) return;
+    if (entryId) {
+      setTimeout(async () => {
+        const current = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
+        await behavior.setFlag(
+          MODULE.ID,
+          'activeSounds',
+          current.filter((entry) => entry.id !== entryId)
+        );
+      }, sound.duration * 1000);
+    }
+    if (waitForCompletion) await new Promise((resolve) => setTimeout(resolve, sound.duration * 1000));
+  };
+  if (waitForCompletion) return settle();
+  settle().catch((err) => ATLAS.log(2, `Glyph: ${err.message}`));
 }
 
 registerNodeType('playSound', {
@@ -87,18 +116,7 @@ registerNodeType('playSound', {
     }
     if (loop) return;
     if (!entryId && !node.waitForCompletion) return;
-    const sound = await foundry.audio.AudioHelper.preloadSound(src);
-    if (entryId && sound?.duration) {
-      setTimeout(async () => {
-        const current = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
-        await behavior.setFlag(
-          MODULE.ID,
-          'activeSounds',
-          current.filter((entry) => entry.id !== entryId)
-        );
-      }, sound.duration * 1000);
-    }
-    if (node.waitForCompletion && sound?.duration) await new Promise((resolve) => setTimeout(resolve, sound.duration * 1000));
+    await settleSound(src, behavior, entryId, !!node.waitForCompletion);
   },
   async batchExecute(pairs) {
     const srcs = await Promise.all(pairs.map(({ node }) => resolveSoundPath(node.path)));
@@ -133,18 +151,7 @@ registerNodeType('playSound', {
         const entryId = entryIds[i];
         if (node.loop === true) return;
         if (!entryId && !node.waitForCompletion) return;
-        const sound = await foundry.audio.AudioHelper.preloadSound(srcs[i]);
-        if (entryId && sound?.duration) {
-          setTimeout(async () => {
-            const current = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
-            await behavior.setFlag(
-              MODULE.ID,
-              'activeSounds',
-              current.filter((entry) => entry.id !== entryId)
-            );
-          }, sound.duration * 1000);
-        }
-        if (node.waitForCompletion && sound?.duration) await new Promise((resolve) => setTimeout(resolve, sound.duration * 1000));
+        await settleSound(srcs[i], behavior, entryId, !!node.waitForCompletion);
       })
     );
   }
@@ -170,15 +177,15 @@ registerNodeType('stopSound', {
     if (node.reference !== undefined && typeof node.reference !== 'object') throw new Error('stopSound.reference must be a reference object.');
   },
   async execute(node, context) {
-    if (node.reference) {
+    if (!isBlankReference(node.reference)) {
       const target = resolveReference(node.reference, context);
       if (target instanceof PlaylistSound) {
-        if (node.state === 'pause') await target.update({ playing: false, pausedTime: target.sound?.currentTime ?? target.pausedTime });
-        else await target.delete();
+        const pausedTime = node.state === 'pause' ? (target.sound?.currentTime ?? target.pausedTime) : 0;
+        await target.update({ playing: false, pausedTime });
       } else if (target instanceof AmbientSoundDocument) await target.update({ hidden: true });
       return;
     }
-    const behavior = 'behavior' in node ? resolveReference(node.behavior, context) : context.info.behavior;
+    const behavior = isBlankReference(node.behavior) ? context.info.behavior : resolveReference(node.behavior, context);
     if (!(behavior instanceof RegionBehavior)) return;
     const tracked = behavior.getFlag(MODULE.ID, 'activeSounds') ?? [];
     const [matching, remaining] = node.key ? [tracked.filter((e) => e.key === node.key), tracked.filter((e) => e.key !== node.key)] : [tracked, []];
@@ -186,24 +193,23 @@ registerNodeType('stopSound', {
     await behavior.setFlag(MODULE.ID, 'activeSounds', remaining);
   },
   async batchExecute(pairs) {
-    const referenced = pairs.filter(({ node }) => node.reference);
-    const flagged = pairs.filter(({ node }) => !node.reference);
+    const referenced = pairs.filter(({ node }) => !isBlankReference(node.reference));
+    const flagged = pairs.filter(({ node }) => isBlankReference(node.reference));
     if (referenced.length) {
       const updates = [];
-      const deletes = [];
       for (const { node, context } of referenced) {
         const target = resolveReference(node.reference, context);
         if (target instanceof PlaylistSound) {
-          if (node.state === 'pause') updates.push({ doc: target, changes: { playing: false, pausedTime: target.sound?.currentTime ?? target.pausedTime } });
-          else deletes.push(target);
+          const pausedTime = node.state === 'pause' ? (target.sound?.currentTime ?? target.pausedTime) : 0;
+          updates.push({ doc: target, changes: { playing: false, pausedTime } });
         } else if (target instanceof AmbientSoundDocument) updates.push({ doc: target, changes: { hidden: true } });
       }
-      await Promise.all([batchUpdate(updates), batchDelete(deletes)]);
+      await batchUpdate(updates);
     }
     if (flagged.length) {
       const groups = new Map();
       for (const { node, context } of flagged) {
-        const behavior = 'behavior' in node ? resolveReference(node.behavior, context) : context.info.behavior;
+        const behavior = isBlankReference(node.behavior) ? context.info.behavior : resolveReference(node.behavior, context);
         if (!(behavior instanceof RegionBehavior)) continue;
         if (!groups.has(behavior)) groups.set(behavior, []);
         groups.get(behavior).push({ node, context });
@@ -264,8 +270,13 @@ registerNodeType('playPlaylist', {
         if (typeof node.volume === 'number') update.volume = node.volume;
         await sound.update(update);
       }
-    } else if (state === 'pause') await (sound ? sound.update({ playing: false, pausedTime: sound.sound?.currentTime ?? 0 }) : playlist.stopAll());
-    else if (state === 'stop') await (sound ? sound.update({ playing: false, pausedTime: 0 }) : playlist.stopAll());
+    } else if (state === 'pause') {
+      if (sound) await sound.update({ playing: false, pausedTime: sound.sound?.currentTime ?? 0 });
+      else {
+        const sounds = playlist.sounds.filter((s) => s.playing).map((s) => ({ _id: s.id, playing: false, pausedTime: s.sound?.currentTime ?? 0 }));
+        await playlist.update({ playing: false, sounds });
+      }
+    } else if (state === 'stop') await (sound ? sound.update({ playing: false, pausedTime: 0 }) : playlist.stopAll());
     else {
       if (!playlist.playing) await playlist.playAll();
       else await playlist.playNext(sound?.id, { direction: state === 'next' ? 1 : -1 });
