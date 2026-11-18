@@ -29,6 +29,19 @@ function normalizeChoices(choices) {
   return Object.entries(choices).map(([value, label]) => ({ value, label: _loc(label) }));
 }
 
+/**
+ * Blank-first choice list of Minstrel moods or pads, keeping a stored id that no longer exists.
+ * @param {{id: string}[]} items Minstrel moods or pads.
+ * @param {string} labelKey The item property holding its display name.
+ * @param {string} value The field's current value.
+ * @returns {{value: string, label: string}[]} The choice list.
+ */
+function minstrelChoices(items, labelKey, value) {
+  const choices = [{ value: '', label: '' }, ...items.map((item) => ({ value: item.id, label: item[labelKey] || item.id }))];
+  if (value && !items.some((item) => item.id === value)) choices.push({ value, label: value });
+  return choices;
+}
+
 /** The active system's language keys, flattened out of its nested CONFIG groups. */
 function languageChoices() {
   const choices = [];
@@ -148,6 +161,10 @@ function buildWidget(field, value, path, ui, node) {
       }));
       return { ...base, kind: 'select', choices, selected: [value] };
     }
+    case 'minstrelMood':
+      return { ...base, kind: 'select', choices: minstrelChoices(MINSTREL.moods.list(), 'name', value), selected: [value || ''] };
+    case 'minstrelPad':
+      return { ...base, kind: 'select', choices: minstrelChoices(MINSTREL.soundboard.list(), 'label', value), selected: [value || ''] };
     case 'language': {
       const choices = languageChoices();
       if (!choices.length) return { ...base, kind: 'text', value: value ?? '' };
