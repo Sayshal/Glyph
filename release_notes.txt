@@ -1,35 +1,3 @@
-## Bug Fixes
+## New Features
 
-- A blank Trigger reference in Set Variable, Stop Sound and Stop Remaining Actions now targets the current trigger.
-- Clicking an @Trigger link in enriched text now runs the linked trigger.
-- Collection source names in the trigger editor are now localized.
-- Editing a single field of an action in the Program tab now saves instead of failing validation.
-- For Each skips its single body action when that action is disabled.
-- Move Token carries the level of a referenced destination, so the token arrives on that level.
-- moveDirection() returns a single direction for straight moves instead of a malformed combined value.
-- Nearby Secret Door Revealed fires only when a secret door becomes a regular door.
-- Play Playlist set to pause on a whole playlist pauses each playing track at its current position, so Play resumes from there.
-- Play Sound no longer holds up later actions while its file loads, and a file that fails to load is now reported.
-- Preload Scene now preloads the scene on every connected client.
-- Rest Day Begins fires only when a rest day starts.
-- Set Date and Time fields left blank stay blank and keep the current value.
-- Set Variable with a blank value now clears the variable.
-- Show Dialog passes the triggering token to button handlers, goto targets and On Close.
-- Stop Sound pointed at a playlist sound stops or pauses it instead of deleting it from the playlist.
-- The "Add" node dropdown in the Program tab stays inside its window and opens upward when there is more room above.
-- The Active Tiles importer flags teleport actions whose destination is not a Tile or Scene or no longer exists.
-- The Active Tiles importer shows a Skipped badge on tiles whose only issues are skipped actions.
-- The Boss Fight Music recipe no longer resets its music when a token enters the Region.
-- The Fire Trap, Pit Trap and Spike Trap recipes and example templates that deal damage are hidden on systems without Hurt/Heal support.
-- The Motion-Activated Light recipe now turns its darkness behavior on when a token enters and off when it leaves.
-- The Teleporter, Alarm Trap and Multi-Choice Portal recipes ping the Region, and the Hidden Passage recipe pings the passage Tile, instead of the scene origin.
-- Weather Effect now plays on the trigger's scene.
-- Write to Journal with Break Line After now writes a valid line break.
-- Write to Journal with Create Page if Missing reuses an existing page of the same name instead of adding a duplicate.
-
-## Changes
-
-- Dropped-item pickups now work only once in total and require the clicking user to have a token with an actor.
-- peddlerTrust() now takes a shop argument and reads the actor's goodwill at that shop.
-- Requires Vision now passes only when another player-owned token has line of sight to the triggering token.
-- Reset History now also clears Go To limit counts.
+- Set Mood (Minstrel) and Play Soundboard Pad (Minstrel) now pick the mood or pad by name from a dropdown instead of a typed id.

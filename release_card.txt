@@ -1,3 +1,3 @@
-## Bug Fixes
+## New Features
 
-- 26 bugs squashed
+- Set Mood (Minstrel) and Play Soundboard Pad (Minstrel) now pick the mood or pad by name from a dropdown instead of a typed id.
